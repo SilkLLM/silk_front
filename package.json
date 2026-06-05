@@ -1,0 +1,40 @@
+{
+  "name": "silkllm-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SilkLLM Frontend — Admin Dashboard, User Dashboard, and Landing Page",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext ts,tsx"
+  },
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^6.23.0",
+    "axios": "^1.7.0",
+    "@tanstack/react-query": "^5.40.0",
+    "recharts": "^2.12.7",
+    "lucide-react": "^0.383.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "@react-three/fiber": "^8.16.8",
+    "@react-three/drei": "^9.105.6",
+    "three": "^0.165.0",
+    "framer-motion": "^11.2.10",
+    "react-hot-toast": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.165.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0",
+    "tailwindcss": "^3.4.4",
+    "postcss": "^8.4.38",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0"
+  }
+}

@@ -1,0 +1,84 @@
+/* File: silkllm-frontend/src/styles/globals.css */
+/* Global styles — Tailwind directives + font imports + base overrides */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --silk-gold:        #D29A2D;
+    --electric-yellow:  #D0C51E;
+    --warm-olive:       #B5B86B;
+    --soft-cream:       #FEF1DC;
+    --bright-glow:      #FAED26;
+    --cloud-grey:       #EDEFF0;
+    --deep-charcoal:    #191B1C;
+    --slate-dark:       #383B3D;
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-cloud-grey text-deep-charcoal font-sans;
+  }
+
+  .dark body {
+    @apply bg-deep-charcoal text-cloud-grey;
+  }
+
+  /* Respect prefers-reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-silk-gold hover:bg-brand-hover text-white font-semibold px-5 py-2.5 rounded-lg
+           transition-colors duration-200 min-h-[44px] min-w-[44px];
+  }
+
+  .btn-secondary {
+    @apply border border-silk-gold text-silk-gold hover:bg-silk-gold hover:text-white
+           font-semibold px-5 py-2.5 rounded-lg transition-colors duration-200 min-h-[44px];
+  }
+
+  .card {
+    @apply bg-soft-cream dark:bg-slate-dark rounded-xl shadow-sm border border-cloud-grey dark:border-muted-metal p-6;
+  }
+
+  .input {
+    @apply w-full bg-white dark:bg-deep-charcoal border border-cloud-grey dark:border-muted-metal
+           rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-silk-gold
+           transition-shadow duration-200 min-h-[44px];
+  }
+
+  .badge-warning { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-bright-glow text-deep-charcoal; }
+  .badge-success { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-warm-olive text-white; }
+  .badge-error   { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500 text-white; }
+  .badge-info    { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cloud-grey text-deep-charcoal; }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--warm-grey, #C2C9CC); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--silk-gold); }
+
+/* Code blocks */
+code, pre {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* EOF silkllm-frontend/src/styles/globals.css */
