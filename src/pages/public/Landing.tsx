@@ -606,7 +606,7 @@ function Hero() {
             animate={{ scale: [1, 1.5, 1], opacity: [0.7, 1, 0.7] }}
             transition={{ duration: 1.8, repeat: Infinity }}
           />
-          ONE API — FIVE PROVIDERS — ZERO COMPLEXITY
+          ONE API - ALL PROVIDERS - ZERO COMPLEXITY
         </motion.div>
 
         {/* headline — word by word reveal */}
