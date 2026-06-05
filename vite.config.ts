@@ -13,7 +13,7 @@ export default defineConfig({
     proxy: {
       // Proxy API calls to the FastAPI backend in development
       "/api": {
-        target: "http://localhost:8000",
+        target: "https://silkllm.onrender.com",
         changeOrigin: true,
       },
     },

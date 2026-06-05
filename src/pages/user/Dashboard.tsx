@@ -15,7 +15,7 @@ import { Link } from "react-router-dom";
 import {
   CreditCard, Key, BarChart2, ArrowRight, TrendingUp, Zap,
   Send, Loader2, Code, Terminal, ChevronDown, ChevronUp, Copy, Check,
-  ToggleLeft, ToggleRight, Server, Cpu
+  ToggleLeft, ToggleRight, Server, Cpu, Clock
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
@@ -253,6 +253,7 @@ function ApiPlayground({ models }: { models: Model[] }) {
             value={selectedProviderId}
             onChange={(e) => setSelectedProviderId(e.target.value)}
             className="input py-2 text-sm"
+            title="Select API provider"
           >
             {activeProviders.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -266,6 +267,7 @@ function ApiPlayground({ models }: { models: Model[] }) {
             onChange={(e) => setSelectedModelId(e.target.value)}
             className="input py-2 text-sm"
             disabled={currentProviderModels.length === 0}
+            title="Select AI model"
           >
             {currentProviderModels.map(m => (
               <option key={m.id} value={m.id}>{m.display_name}</option>
@@ -281,6 +283,8 @@ function ApiPlayground({ models }: { models: Model[] }) {
             type="number" step={0.1} min={0} max={2} value={temperature}
             onChange={(e) => setTemperature(parseFloat(e.target.value))}
             className="input py-2 text-sm"
+            title="Temperature (0-2)"
+            placeholder="1.0"
           />
         </div>
         <div className="w-28">
@@ -289,6 +293,8 @@ function ApiPlayground({ models }: { models: Model[] }) {
             type="number" step={256} min={1} max={32000} value={maxTokens}
             onChange={(e) => setMaxTokens(parseInt(e.target.value))}
             className="input py-2 text-sm"
+            title="Maximum tokens for response"
+            placeholder="4096"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -306,6 +312,7 @@ function ApiPlayground({ models }: { models: Model[] }) {
             value={selectedKeyId}
             onChange={(e) => setSelectedKeyId(e.target.value)}
             className="input py-2 text-sm"
+            title="Select which API key to use for this request"
           >
             {keyOptions.map(opt => (
               <option key={opt.id} value={opt.id}>{opt.name}</option>
