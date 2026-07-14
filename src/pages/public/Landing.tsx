@@ -296,11 +296,15 @@ function TypewriterCode() {
 // PROVIDER CARD - tilt + glow on hover (unchanged visually, slightly lighter)
 // ─────────────────────────────────────────────────────────────────────────────
 const PROVIDERS = [
-  { name: "OpenAI",    color: "#74aa9c", sub: "GPT-4o · o3 · o1"        },
-  { name: "Anthropic", color: "#D97757", sub: "Claude 3.5 · 3.7 Sonnet" },
-  { name: "Google",    color: "#4285f4", sub: "Gemini 2.0 · 1.5 Flash"  },
-  { name: "DeepSeek",  color: "#5BC4F5", sub: "V3 · R1 · Coder"         },
-  { name: "xAI",       color: "#D8D8D8", sub: "Grok 3 · Grok 3 Mini"    },
+  { name: "OpenAI",     color: "#74aa9c", sub: "GPT-4o · o3 · o1"        },
+  { name: "Anthropic",  color: "#D97757", sub: "Claude 3.5 · 3.7 Sonnet" },
+  { name: "Google",     color: "#4285f4", sub: "Gemini 2.0 · 1.5 Flash"  },
+  { name: "DeepSeek",   color: "#5BC4F5", sub: "V3 · R1 · Coder"         },
+  { name: "xAI",        color: "#D8D8D8", sub: "Grok 3 · Grok 3 Mini"    },
+  { name: "Groq",       color: "#F55036", sub: "Llama · Mixtral · free"  },
+  { name: "Cerebras",   color: "#5EC26A", sub: "Llama · free tier"       },
+  { name: "OpenRouter", color: "#8B93A7", sub: "Free open models"        },
+  { name: "ElevenLabs", color: "#A78BFA", sub: "Voices · cloning · STS"  },
 ];
 
 function ProviderCard({ name, color, sub, index }: (typeof PROVIDERS)[0] & { index: number }) {
@@ -642,8 +646,8 @@ function Hero() {
           className="text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed"
           style={{ color: "#595F61" }}
         >
-          One key across text, image, audio and video. Bring your own provider key and earn credits when
-          others use it. Start free, and keep your chats on your own device.
+          One key across text, image, voice and video, with vision input and voice cloning. Bring your own
+          provider key and earn credits when others use it. Start free, and keep your chats on your own device.
         </motion.p>
 
         <motion.div
@@ -831,7 +835,8 @@ function Providers() {
             <span style={{ color: "#D29A2D" }}>One key.</span>
           </h2>
           <p className="text-base leading-relaxed mt-5 max-w-xl" style={{ color: "#595F61" }}>
-            We start with the majors and add more continuously. Your one key keeps working as the catalogue grows.
+            Frontier chat models, free-tier backends, and a full voice stack, all behind one key.
+            It keeps working as the catalogue grows.
           </p>
         </motion.div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -1311,10 +1316,10 @@ function EarnLoop() {
 // MODALITIES - text / image / audio / video
 // ─────────────────────────────────────────────────────────────────────────────
 const MODALITIES = [
-  { icon: <Type size={22} />,       name: "Text",  sub: "GPT-4o, Claude, Gemini, Grok", color: "#D29A2D" },
-  { icon: <ImageIcon size={22} />,  name: "Image", sub: "DALL-E and more",             color: "#D0C51E" },
-  { icon: <AudioLines size={22} />, name: "Audio", sub: "Text to speech",              color: "#B5B86B" },
-  { icon: <Video size={22} />,      name: "Video", sub: "Where providers support it",  color: "#FAC059" },
+  { icon: <Type size={22} />,       name: "Text",  sub: "Chat, reasoning, vision input", color: "#D29A2D" },
+  { icon: <ImageIcon size={22} />,  name: "Image", sub: "DALL-E, Gemini, and more",      color: "#D0C51E" },
+  { icon: <AudioLines size={22} />, name: "Voice", sub: "TTS, cloning, voice change",     color: "#B5B86B" },
+  { icon: <Video size={22} />,      name: "Video", sub: "Where providers support it",     color: "#FAC059" },
 ];
 
 function Modalities() {
@@ -1373,13 +1378,18 @@ function OwnData() {
             <br /><span style={{ color: "#D29A2D" }}>Your device.</span>
           </h2>
           <p className="text-base leading-relaxed mb-8" style={{ color: "#595F61" }}>
-            A full chat experience that keeps every conversation in your own browser. You choose how long it lives
-            before it dissolves. We never store your chat content. Start on a free trial, no card needed.
+            A full chat that keeps every conversation in your own browser. Generate text, images, and speech inline,
+            attach an image to ask about it, edit or regenerate any turn, and download what you make. You choose how
+            long a chat lives before it dissolves; we never store your chat content. Start on a free trial, no card needed.
           </p>
           <div className="flex flex-wrap gap-3">
             <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
               style={{ background: "rgba(210,154,45,0.08)", color: "#D29A2D", border: "1px solid rgba(210,154,45,0.2)" }}>
               <Gift size={15} /> Free trial for 3 months
+            </span>
+            <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
+              style={{ background: "#111314", color: "#7A8285", border: "1px solid #1E2022" }}>
+              <Sparkles size={15} /> Text, image, and voice inline
             </span>
             <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
               style={{ background: "#111314", color: "#7A8285", border: "1px solid #1E2022" }}>
