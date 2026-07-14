@@ -99,6 +99,14 @@ export default function AdminModels() {
           <div>
             <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey">Model Control</h1>
             <p className="text-warm-grey mt-1">Full CRUD: create, update, delete models. Configure pricing, fallbacks, and routing.</p>
+            {models && (
+              <div className="flex flex-wrap gap-2 mt-3 text-xs">
+                <span className="badge-info">{models.length} models</span>
+                <span className="badge-success">{models.filter((m: any) => m.is_free).length} free</span>
+                <span className="badge-info">{models.filter((m: any) => (m.modality || "text") !== "text").length} image/audio/video</span>
+                <span className="badge-info">{new Set(models.map((m: any) => m.provider_id)).size} providers</span>
+              </div>
+            )}
           </div>
           <button onClick={() => setShowAddForm(true)} className="btn-primary flex items-center gap-2">
             <Plus size={16} /> Add Model
@@ -317,6 +325,8 @@ export default function AdminModels() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-deep-charcoal dark:text-cloud-grey text-sm">{m.display_name}</span>
                             <span className="font-mono text-xs text-warm-grey">{m.id}</span>
+                            {m.is_free && <span className="badge-success">Free</span>}
+                            {m.modality && m.modality !== "text" && <span className="badge-info">{m.modality}</span>}
                             {!m.enabled && <span className="badge-error">Disabled</span>}
                           </div>
 
