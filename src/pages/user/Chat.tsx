@@ -10,16 +10,30 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X, Copy, Pencil, RefreshCw,
-  Type, Image as ImageIcon, AudioLines, Video, Sliders } from "lucide-react";
+  Type, Image as ImageIcon, AudioLines, Video, Sliders, Paperclip } from "lucide-react";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
 import { modelsApi, generateApi, mediaApi } from "@/services/api";
 
 type Role = "user" | "assistant" | "system";
+// Multimodal input parts (vision). Assistant replies are always plain strings.
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
 // `kind` records how an assistant message was produced (text or a media modality)
 // so it can be regenerated the same way.
-interface Msg { role: Role; content: string; kind?: "text" | "image" | "audio" | "video"; }
+interface Msg { role: Role; content: string | ContentPart[]; kind?: "text" | "image" | "audio" | "video"; }
+
+// Extract the plain text of a message (for copy, titles, and prompts).
+function messageText(content: string | ContentPart[]): string {
+  if (typeof content === "string") return content;
+  return content.filter((p) => p.type === "text").map((p) => (p as any).text).join(" ");
+}
+function messageImages(content: string | ContentPart[]): string[] {
+  if (typeof content === "string") return [];
+  return content.filter((p) => p.type === "image_url").map((p) => (p as any).image_url.url);
+}
 interface Conversation { id: string; title: string; model: string; createdAt: number; updatedAt: number; messages: Msg[]; }
 interface ChatStore { version: number; expiryDays: number; conversations: Conversation[]; }
 
@@ -118,6 +132,9 @@ export default function Chat() {
   const stopRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Pending image attachments (data URIs) for the next vision message.
+  const [attachments, setAttachments] = useState<{ url: string; name: string }[]>([]);
 
   const { data: allModels } = useQuery({
     queryKey: ["chat-models"],
@@ -137,6 +154,13 @@ export default function Chat() {
       setModel(modeModels[0].id);
     }
   }, [modeModels, model]);
+
+  // Group the current mode's models by provider for the picker.
+  const modelsByProvider = useMemo(() => {
+    const g: Record<string, any[]> = {};
+    for (const m of modeModels) (g[m.provider_id] ||= []).push(m);
+    return g;
+  }, [modeModels]);
 
   // Voice controls (audio mode).
   const selectedModel = useMemo(() => modeModels.find((m: any) => m.id === model), [modeModels, model]);
@@ -194,6 +218,9 @@ export default function Chat() {
   const storageMB = ((usedChars * 2) / 1048576).toFixed(2);
   const budgetMB = ((STORAGE_BUDGET * 2) / 1048576).toFixed(1);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [activeId, liveText, store]);
+
+  // Image attachments only apply to text (vision) chat.
+  useEffect(() => { if (mode !== "text") setAttachments([]); }, [mode]);
 
   const active = useMemo(() => store.conversations.find((c) => c.id === activeId) || null, [store, activeId]);
 
@@ -272,8 +299,28 @@ export default function Chat() {
     }
   }
 
+  function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function addFiles(files: FileList | null) {
+    if (!files) return;
+    const imgs = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (imgs.length === 0) { toast.error("Only image files can be attached for now."); return; }
+    for (const f of imgs) {
+      if (f.size > 8 * 1024 * 1024) { toast.error(`${f.name} is larger than 8 MB.`); continue; }
+      const url = await readFileAsDataUrl(f);
+      setAttachments((a) => [...a, { url, name: f.name }]);
+    }
+  }
+
   async function send() {
-    if (!input.trim() || streaming) return;
+    if ((!input.trim() && attachments.length === 0) || streaming) return;
     if (mode !== "text" && modeModels.length === 0) {
       toast.error(`No ${mode} models are available right now.`);
       return;
@@ -286,13 +333,21 @@ export default function Chat() {
       setActiveId(convId);
     }
     const prompt = input.trim();
-    const userMsg: Msg = { role: "user", content: prompt };
+    // Build multimodal content when images are attached (vision input).
+    const content: string | ContentPart[] = attachments.length > 0
+      ? [
+          ...(prompt ? [{ type: "text", text: prompt } as ContentPart] : []),
+          ...attachments.map((a) => ({ type: "image_url", image_url: { url: a.url } } as ContentPart)),
+        ]
+      : prompt;
+    const userMsg: Msg = { role: "user", content };
     const history = (store.conversations.find((c) => c.id === convId)?.messages || []).concat(userMsg);
     updateConversation(convId!, (c) => ({
       ...c, messages: history, updatedAt: Date.now(),
-      title: c.messages.length === 0 ? prompt.slice(0, 40) : c.title,
+      title: c.messages.length === 0 ? (prompt || "Image chat").slice(0, 40) : c.title,
     }));
     setInput("");
+    setAttachments([]);
     if (mode === "text") {
       await runGeneration(convId!, history);
     } else {
@@ -317,7 +372,7 @@ export default function Chat() {
     if (kind === "text") {
       runGeneration(activeId, history);
     } else {
-      const prompt = history[history.length - 1]?.content || "";
+      const prompt = messageText(history[history.length - 1]?.content || "");
       runMediaGeneration(activeId, kind, prompt, { voice, voiceSettings, elevenlabs: isElevenlabs });
     }
   }
@@ -328,7 +383,7 @@ export default function Chat() {
     if (streaming || !activeId) return;
     const conv = store.conversations.find((c) => c.id === activeId);
     if (!conv) return;
-    setInput(conv.messages[index].content);
+    setInput(messageText(conv.messages[index].content));
     updateConversation(activeId, (c) => ({ ...c, messages: c.messages.slice(0, index), updatedAt: Date.now() }));
     setTimeout(() => textareaRef.current?.focus(), 0);
   }
@@ -437,7 +492,13 @@ export default function Chat() {
               value={model} onChange={(e) => setModel(e.target.value)} disabled={modeModels.length === 0}>
               {modeModels.length === 0
                 ? <option value="">No {mode} models</option>
-                : modeModels.map((m: any) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+                : Object.entries(modelsByProvider).map(([prov, list]) => (
+                    <optgroup key={prov} label={prov}>
+                      {(list as any[]).map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.display_name}{m.is_free ? " (free)" : ""}</option>
+                      ))}
+                    </optgroup>
+                  ))}
             </select>
             <button onClick={newChat} className="md:hidden text-silk-gold p-1 -m-1 shrink-0" title="New chat"><Plus size={20} /></button>
           </div>
@@ -452,15 +513,28 @@ export default function Chat() {
               active.messages.map((m, i) => (
                 <div key={i} className={`group flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
                   <div className={`max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                    m.role === "user" ? "bg-silk-gold text-white whitespace-pre-wrap break-words" : "bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey"
+                    m.role === "user" ? "bg-silk-gold text-white break-words" : "bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey"
                   }`}>
-                    {m.role === "user" ? m.content : <Markdown text={m.content} />}
+                    {m.role === "user" ? (
+                      <div className="space-y-2">
+                        {messageImages(m.content).length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {messageImages(m.content).map((src, k) => (
+                              <img key={k} src={src} alt="attachment" className="max-h-40 rounded-lg object-cover" />
+                            ))}
+                          </div>
+                        )}
+                        {messageText(m.content) && <span className="whitespace-pre-wrap">{messageText(m.content)}</span>}
+                      </div>
+                    ) : (
+                      <Markdown text={m.content as string} />
+                    )}
                   </div>
                   {/* Per-message actions: always visible on touch, hover-revealed on desktop */}
                   <div className={`flex items-center gap-0.5 mt-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity ${
                     m.role === "user" ? "flex-row-reverse" : ""
                   }`}>
-                    <ActionBtn onClick={() => copyText(m.content)} title="Copy"><Copy size={14} /></ActionBtn>
+                    <ActionBtn onClick={() => copyText(messageText(m.content))} title="Copy"><Copy size={14} /></ActionBtn>
                     {m.role === "user" ? (
                       <ActionBtn onClick={() => editMessage(i)} title="Edit"><Pencil size={14} /></ActionBtn>
                     ) : (
@@ -548,7 +622,33 @@ export default function Chat() {
               </div>
             )}
 
+            {/* Attached image previews (vision input) */}
+            {attachments.length > 0 && (
+              <div className="px-3 pt-2 flex flex-wrap gap-2">
+                {attachments.map((a, i) => (
+                  <div key={i} className="relative group/att">
+                    <img src={a.url} alt={a.name} className="h-14 w-14 object-cover rounded-lg border border-muted-metal/40" />
+                    <button
+                      onClick={() => setAttachments((prev) => prev.filter((_, k) => k !== i))}
+                      className="absolute -top-1.5 -right-1.5 bg-slate-dark text-cloud-grey rounded-full p-0.5 border border-muted-metal/50"
+                      title="Remove"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="px-3 pb-3 pt-2 flex items-end gap-2">
+              <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
+                onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+              {mode === "text" && (
+                <button onClick={() => fileRef.current?.click()}
+                  className="btn-secondary shrink-0 px-2.5" title="Attach image (vision)">
+                  <Paperclip size={16} />
+                </button>
+              )}
               <textarea
                 ref={textareaRef}
                 className="input flex-1 resize-none max-h-32"
@@ -571,7 +671,7 @@ export default function Chat() {
               ) : (
                 <button
                   onClick={send}
-                  disabled={!input.trim() || (mode !== "text" && modeModels.length === 0)}
+                  disabled={(!input.trim() && attachments.length === 0) || (mode !== "text" && modeModels.length === 0)}
                   className="btn-primary shrink-0 disabled:opacity-50"
                   title="Send"
                 >

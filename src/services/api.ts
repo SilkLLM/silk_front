@@ -117,7 +117,7 @@ export const generateApi = {
    */
   streamGenerate: async (
     params: {
-      messages: { role: string; content: string }[];
+      messages: { role: string; content: string | unknown[] }[];
       model?: string;
       provider?: string;
       temperature?: number;
