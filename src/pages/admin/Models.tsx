@@ -7,7 +7,7 @@
 
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ToggleLeft, ToggleRight, Save, Plus, Trash2, X } from "lucide-react";
+import { ToggleLeft, ToggleRight, Save, Plus, Trash2, X, ChevronDown, ChevronRight, Search } from "lucide-react";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
@@ -28,6 +28,14 @@ export default function AdminModels() {
     capabilities: "",
     context_window: 4096,
   });
+
+  // Filters and per-provider collapse state
+  const [search, setSearch] = useState("");
+  const [providerFilter, setProviderFilter] = useState("all");
+  const [modalityFilter, setModalityFilter] = useState("all");
+  const [tierFilter, setTierFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const { data: models, isLoading } = useQuery({
     queryKey: ["admin-models"],
@@ -82,15 +90,38 @@ export default function AdminModels() {
     }
   };
 
-  // Group models by provider
-  const grouped = models?.reduce((acc: any, m: any) => {
+  // Full provider list (unfiltered) used for the add-model dropdown and the filter select
+  const providerIds: string[] = Array.from(
+    new Set(((models as any[]) || []).map((m: any) => String(m.provider_id)))
+  ).sort();
+
+  // Apply the active filters before grouping
+  const q = search.trim().toLowerCase();
+  const filtersActive =
+    !!q || providerFilter !== "all" || modalityFilter !== "all" || tierFilter !== "all" || statusFilter !== "all";
+  const filtered = (models || []).filter((m: any) => {
+    if (providerFilter !== "all" && m.provider_id !== providerFilter) return false;
+    const mod = m.modality || "text";
+    if (modalityFilter !== "all" && mod !== modalityFilter) return false;
+    if (tierFilter === "free" && !m.is_free) return false;
+    if (tierFilter === "paid" && m.is_free) return false;
+    if (statusFilter === "enabled" && !m.enabled) return false;
+    if (statusFilter === "disabled" && m.enabled) return false;
+    if (q && !`${m.display_name} ${m.id}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // Group filtered models by provider
+  const grouped = filtered.reduce((acc: any, m: any) => {
     if (!acc[m.provider_id]) acc[m.provider_id] = [];
     acc[m.provider_id].push(m);
     return acc;
-  }, {}) || {};
+  }, {} as Record<string, any[]>);
+  const groupKeys = Object.keys(grouped).sort();
 
-  // Get unique provider IDs for the dropdown
-  const providerIds = Object.keys(grouped);
+  const clearFilters = () => {
+    setSearch(""); setProviderFilter("all"); setModalityFilter("all"); setTierFilter("all"); setStatusFilter("all");
+  };
 
   return (
     <DashboardLayout>
@@ -168,7 +199,7 @@ export default function AdminModels() {
                   onChange={(e) => setNewModel({ ...newModel, display_name: e.target.value })}
                   className="input"
                 />
-                <p className="text-xs text-warm-grey mt-1">Human‑friendly name shown to users.</p>
+                <p className="text-xs text-warm-grey mt-1">Human-friendly name shown to users.</p>
               </div>
 
               {/* Enabled toggle */}
@@ -235,7 +266,7 @@ export default function AdminModels() {
                   onChange={(e) => setNewModel({ ...newModel, routing_weight: parseInt(e.target.value) })}
                   className="input"
                 />
-                <p className="text-xs text-warm-grey mt-1">Higher weight = more traffic (auto‑routing).</p>
+                <p className="text-xs text-warm-grey mt-1">Higher weight = more traffic (auto-routing).</p>
               </div>
 
               {/* Context Window */}
@@ -255,7 +286,7 @@ export default function AdminModels() {
               {/* Fallback Models */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Fallback Models (comma‑separated IDs)
+                  Fallback Models (comma-separated IDs)
                 </label>
                 <input
                   type="text"
@@ -270,7 +301,7 @@ export default function AdminModels() {
               {/* Capabilities */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Capabilities (comma‑separated)
+                  Capabilities (comma-separated)
                 </label>
                 <input
                   type="text"
@@ -279,7 +310,7 @@ export default function AdminModels() {
                   onChange={(e) => setNewModel({ ...newModel, capabilities: e.target.value })}
                   className="input"
                 />
-                <p className="text-xs text-warm-grey mt-1">E.g., chat, function‑calling, vision, embedding.</p>
+                <p className="text-xs text-warm-grey mt-1">E.g., chat, function-calling, vision, embedding.</p>
               </div>
             </div>
 
@@ -307,14 +338,102 @@ export default function AdminModels() {
           </div>
         )}
 
+        {/* Filter bar */}
+        {models && models.length > 0 && (
+          <div className="card">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="lg:col-span-2">
+                <label className="text-xs text-warm-grey">Search</label>
+                <div className="relative mt-1">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-grey pointer-events-none" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search by name or model id"
+                    className="input pl-9"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-warm-grey">Provider</label>
+                <select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} className="input mt-1">
+                  <option value="all">All providers</option>
+                  {providerIds.map((pid) => <option key={pid} value={pid}>{pid}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-warm-grey">Modality</label>
+                <select value={modalityFilter} onChange={(e) => setModalityFilter(e.target.value)} className="input mt-1">
+                  <option value="all">All modalities</option>
+                  <option value="text">Text</option>
+                  <option value="image">Image</option>
+                  <option value="audio">Audio</option>
+                  <option value="video">Video</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-warm-grey">Tier</label>
+                <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} className="input mt-1">
+                  <option value="all">All tiers</option>
+                  <option value="free">Free</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-warm-grey">Status</label>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input mt-1">
+                  <option value="all">All statuses</option>
+                  <option value="enabled">Enabled</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between flex-wrap gap-2 mt-3">
+              <span className="text-xs text-warm-grey">
+                Showing {filtered.length} of {models.length} models
+                {filtersActive && (
+                  <button onClick={clearFilters} className="ml-2 text-silk-gold hover:underline">Clear filters</button>
+                )}
+              </span>
+              <div className="flex gap-4 text-xs">
+                <button onClick={() => setCollapsed({})} className="text-silk-gold hover:underline">Expand all</button>
+                <button
+                  onClick={() => setCollapsed(Object.fromEntries(groupKeys.map((k) => [k, true])))}
+                  className="text-silk-gold hover:underline"
+                >
+                  Collapse all
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="text-warm-grey">Loading models...</div>
+        ) : groupKeys.length === 0 ? (
+          <div className="card text-center text-warm-grey py-10">
+            {models && models.length > 0 ? "No models match the current filters." : "No models yet."}
+          </div>
         ) : (
-          Object.entries(grouped).map(([providerId, provModels]: [string, any]) => (
+          groupKeys.map((providerId) => {
+            const provModels = grouped[providerId];
+            const isCollapsed = !!collapsed[providerId];
+            const freeCount = provModels.filter((m: any) => m.is_free).length;
+            return (
             <div key={providerId} className="card p-0 overflow-hidden">
-              <div className="px-5 py-3 bg-cloud-grey dark:bg-deep-charcoal border-b border-muted-metal flex justify-between items-center">
-                <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey capitalize">{providerId}</h2>
-              </div>
+              <button
+                onClick={() => setCollapsed((c) => ({ ...c, [providerId]: !c[providerId] }))}
+                className="w-full px-5 py-3 bg-cloud-grey dark:bg-deep-charcoal border-b border-muted-metal flex justify-between items-center text-left hover:bg-muted-metal/40 transition-colors"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  {isCollapsed ? <ChevronRight size={18} className="text-warm-grey" /> : <ChevronDown size={18} className="text-warm-grey" />}
+                  <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey capitalize">{providerId}</h2>
+                  <span className="badge-info">{provModels.length}</span>
+                  {freeCount > 0 && <span className="badge-success">{freeCount} free</span>}
+                </div>
+              </button>
+              {!isCollapsed && (
               <div className="divide-y divide-cloud-grey dark:divide-muted-metal">
                 {provModels.map((m: any) => {
                   const hasEdits = !!editing[m.id];
@@ -438,8 +557,10 @@ export default function AdminModels() {
                   );
                 })}
               </div>
+              )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </DashboardLayout>

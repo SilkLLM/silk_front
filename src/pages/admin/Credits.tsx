@@ -7,7 +7,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, BookOpen, Gift } from "lucide-react";
+import { Users, BookOpen, Gift, Search } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -23,6 +23,9 @@ export default function AdminCredits() {
   const [tab, setTab] = useState<Tab>("users");
   const [ledgerPage, setLedgerPage] = useState(1);
   const [refundForm, setRefundForm] = useState({ user_id: "", amount_usd: "", reason: "" });
+  const [userSearch, setUserSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
 
   const { data: ledger, isLoading: ledgerLoading } = useQuery({
     queryKey: ["admin-ledger", ledgerPage],
@@ -48,6 +51,16 @@ export default function AdminCredits() {
       qc.invalidateQueries({ queryKey: ["admin-users"] });
     },
     onError: () => toast.error("Refund failed."),
+  });
+
+  const uq = userSearch.trim().toLowerCase();
+  const userFiltersActive = !!uq || roleFilter !== "all" || userStatusFilter !== "all";
+  const filteredUsers = (users || []).filter((u: any) => {
+    if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    if (userStatusFilter === "active" && !u.is_active) return false;
+    if (userStatusFilter === "suspended" && u.is_active) return false;
+    if (uq && !`${u.name || ""} ${u.email || ""}`.toLowerCase().includes(uq)) return false;
+    return true;
   });
 
   const topBalances = useMemo(() =>
@@ -101,6 +114,44 @@ export default function AdminCredits() {
                 </ResponsiveContainer>
               </div>
             )}
+          {/* Users filter bar */}
+          {users && users.length > 0 && (
+            <div className="card">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-warm-grey">Search</label>
+                  <div className="relative mt-1">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-grey pointer-events-none" />
+                    <input type="text" value={userSearch} onChange={(e) => setUserSearch(e.target.value)}
+                           placeholder="Search by name or email" className="input pl-9" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-warm-grey">Role</label>
+                  <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="input mt-1">
+                    <option value="all">All roles</option>
+                    <option value="admin">Admin</option>
+                    <option value="user">User</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-warm-grey">Status</label>
+                  <select value={userStatusFilter} onChange={(e) => setUserStatusFilter(e.target.value)} className="input mt-1">
+                    <option value="all">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-warm-grey">
+                Showing {filteredUsers.length} of {users.length} users
+                {userFiltersActive && (
+                  <button onClick={() => { setUserSearch(""); setRoleFilter("all"); setUserStatusFilter("all"); }}
+                          className="ml-2 text-silk-gold hover:underline">Clear filters</button>
+                )}
+              </div>
+            </div>
+          )}
           <div className="card p-0 overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -114,7 +165,9 @@ export default function AdminCredits() {
               <tbody className="divide-y divide-cloud-grey dark:divide-muted-metal">
                 {usersLoading ? (
                   <tr><td colSpan={6} className="text-center py-8 text-warm-grey">Loading...</td></tr>
-                ) : users?.map((u: any) => (
+                ) : filteredUsers.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center py-8 text-warm-grey">No users match the current filters.</td></tr>
+                ) : filteredUsers.map((u: any) => (
                   <tr key={u.id} className="hover:bg-soft-cream dark:hover:bg-slate-dark">
                     <td className="px-4 py-3 font-medium text-deep-charcoal dark:text-cloud-grey">{u.name}</td>
                     <td className="px-4 py-3 text-warm-grey text-xs">{u.email}</td>

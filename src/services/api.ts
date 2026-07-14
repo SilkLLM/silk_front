@@ -71,7 +71,7 @@ export const modelsApi = {
   list: (provider?: string) => api.get("/models", { params: { provider } }),
 };
 
-// ── Generation API (streaming + non‑streaming, with optional API key override) ──
+// ── Generation API (streaming + non-streaming, with optional API key override) ──
 export const generateApi = {
   /**
    * Non-streaming generation.
