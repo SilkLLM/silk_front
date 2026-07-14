@@ -14,12 +14,12 @@
 import React, {
   useRef, useEffect, useState, useCallback, useMemo
 } from "react";
-import { motion, useMotionValue, useSpring, useTransform,
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform,
          useScroll } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
   ArrowRight, ChevronDown, Coins, Type, Image as ImageIcon, AudioLines,
-  Video, ShieldCheck, Sparkles, Gift,
+  Video, ShieldCheck, Sparkles, Gift, Mic, Play, Wand2, Download,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -491,6 +491,7 @@ function Nav() {
         {[
           ["#marketplace", "Marketplace"],
           ["#modalities", "Modalities"],
+          ["#voice", "Voice"],
           ["#pricing", "Pricing"],
           ["/docs", "Docs"],
         ].map(([href, label]) =>
@@ -1361,6 +1362,206 @@ function Modalities() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// VOICE - a dedicated, animated showcase for the voice suite
+// ─────────────────────────────────────────────────────────────────────────────
+const VOICE_NAMES = ["Rachel", "Antoni", "Bella", "Domi", "Josh", "Your voice"];
+const VOICE_FEATURES = [
+  { icon: <AudioLines size={15} />, label: "Text to speech" },
+  { icon: <Mic size={15} />,        label: "Voice changer" },
+  { icon: <Wand2 size={15} />,      label: "Instant cloning" },
+  { icon: <Sparkles size={15} />,   label: "Fine controls" },
+];
+
+// A living equalizer. Bars pulse on an index-derived rhythm (no randomness so it
+// stays deterministic), giving the panel a sense of live audio.
+function VoiceWave({ bars = 40, active = true }: { bars?: number; active?: boolean }) {
+  return (
+    <div className="flex items-center gap-[3px] h-16 w-full">
+      {Array.from({ length: bars }).map((_, i) => {
+        const base = 18 + ((i * 7) % 40);
+        const peak = 55 + ((i * 13) % 45);
+        return (
+          <motion.span
+            key={i}
+            className="flex-1 rounded-full"
+            style={{ background: "#D29A2D", minWidth: 2, opacity: 0.5 + ((i % 6) / 12) }}
+            animate={active ? { height: [`${base}%`, `${peak}%`, `${base}%`] } : { height: "20%" }}
+            transition={{ duration: 0.9 + ((i % 5) * 0.18), repeat: Infinity, ease: "easeInOut", delay: (i % 9) * 0.06 }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function VoiceSlider({ label, value, delay }: { label: string; value: number; delay: number }) {
+  return (
+    <div>
+      <div className="flex justify-between text-[10px] font-mono mb-1" style={{ color: "#595F61" }}>
+        <span>{label}</span><span>{value.toFixed(2)}</span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1A1C1E" }}>
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: "#D29A2D" }}
+          initial={{ width: 0 }}
+          whileInView={{ width: `${value * 100}%` }}
+          viewport={{ once: true }}
+          transition={{ duration: 1, delay, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Voice() {
+  const [vi, setVi] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setVi((v) => (v + 1) % VOICE_NAMES.length), 2200);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <section id="voice" className="relative py-28 px-6 overflow-hidden" style={{ background: "#0A0A0A" }}>
+      {/* Ambient glow */}
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        animate={{ opacity: [0.25, 0.5, 0.25] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+        style={{ background: "radial-gradient(ellipse 50% 45% at 70% 40%, rgba(210,154,45,0.08), transparent)" }}
+      />
+      <div className="relative max-w-5xl mx-auto grid md:grid-cols-2 gap-16 items-center">
+        {/* Copy */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }} transition={{ duration: 0.8 }} className="min-w-0"
+        >
+          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Voice studio</p>
+          <h2 className="font-display font-bold mb-6 leading-tight"
+            style={{ fontSize: "clamp(2rem,5vw,3.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
+            Any voice.
+            <br /><span style={{ color: "#D29A2D" }}>On demand.</span>
+          </h2>
+          <p className="text-base leading-relaxed mb-8" style={{ color: "#595F61" }}>
+            Turn text into lifelike speech with a chosen speaker, convert any clip into another voice, or clone
+            your own from a few samples, then dial in stability, similarity, and style. The same key, the same bill.
+          </p>
+          <div className="flex flex-wrap gap-2.5 mb-8">
+            {VOICE_FEATURES.map((f, i) => (
+              <motion.span
+                key={f.label} data-magnetic
+                initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ delay: 0.2 + i * 0.08 }}
+                className="inline-flex items-center gap-2 text-sm px-3.5 py-2 rounded-xl"
+                style={{ background: "#111314", color: "#9AA0A3", border: "1px solid #1E2022" }}
+              >
+                <span style={{ color: "#D29A2D" }}>{f.icon}</span> {f.label}
+              </motion.span>
+            ))}
+          </div>
+          <Link to="/docs">
+            <motion.div
+              className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl w-fit"
+              style={{ border: "1px solid rgba(210,154,45,0.35)", color: "#D29A2D" }}
+              whileHover={{ background: "rgba(210,154,45,0.07)", borderColor: "rgba(210,154,45,0.6)" }}
+            >
+              Explore voice <ArrowRight size={15} />
+            </motion.div>
+          </Link>
+        </motion.div>
+
+        {/* Studio panel */}
+        <motion.div
+          initial={{ opacity: 0, y: 30, scale: 0.97 }} whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          viewport={{ once: true }} transition={{ duration: 0.8, delay: 0.15 }}
+          className="min-w-0 rounded-2xl p-5 sm:p-6"
+          style={{ background: "#0D0E0F", border: "1px solid #1E2022", boxShadow: "0 32px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(210,154,45,0.06)" }}
+        >
+          {/* Header: cycling speaker */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "rgba(210,154,45,0.12)", border: "1px solid rgba(210,154,45,0.3)" }}>
+              <AudioLines size={18} style={{ color: "#D29A2D" }} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "#3A3F42" }}>Speaker</div>
+              <div className="h-6 overflow-hidden">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={vi}
+                    initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="font-display font-semibold text-lg leading-6"
+                    style={{ color: vi === VOICE_NAMES.length - 1 ? "#D29A2D" : "#EDEFF0" }}
+                  >
+                    {VOICE_NAMES[vi]}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#28ca41" }} />
+              <span className="text-[10px] font-mono" style={{ color: "#28ca41", opacity: 0.8 }}>live</span>
+            </div>
+          </div>
+
+          {/* Waveform + play */}
+          <div className="flex items-center gap-3 rounded-xl px-4 py-3 mb-5" style={{ background: "#0A0B0C", border: "1px solid #1A1C1E" }}>
+            <motion.div
+              className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "#D29A2D", color: "#0A0A0A" }}
+              whileHover={{ scale: 1.08 }}
+              animate={{ boxShadow: ["0 0 0 0 rgba(210,154,45,0.4)", "0 0 0 10px rgba(210,154,45,0)"] }}
+              transition={{ duration: 1.8, repeat: Infinity }}
+            >
+              <Play size={15} className="ml-0.5" />
+            </motion.div>
+            <VoiceWave />
+          </div>
+
+          {/* Voice settings */}
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <VoiceSlider label="Stability" value={0.5} delay={0.2} />
+            <VoiceSlider label="Similarity" value={0.75} delay={0.32} />
+            <VoiceSlider label="Style" value={0.35} delay={0.44} />
+          </div>
+
+          {/* Pipeline: your clip -> any voice, and cloning */}
+          <div className="rounded-xl p-4" style={{ background: "#0A0B0C", border: "1px solid #1A1C1E" }}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col items-center gap-1.5 text-center flex-1">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "#141617", border: "1px solid #1E2022" }}>
+                  <Mic size={16} style={{ color: "#9AA0A3" }} />
+                </div>
+                <span className="text-[10px] font-mono" style={{ color: "#595F61" }}>Your clip</span>
+              </div>
+              <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 1.4, repeat: Infinity }}>
+                <ArrowRight size={16} style={{ color: "#D29A2D" }} />
+              </motion.div>
+              <div className="flex flex-col items-center gap-1.5 text-center flex-1">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "rgba(210,154,45,0.12)", border: "1px solid rgba(210,154,45,0.3)" }}>
+                  <Wand2 size={16} style={{ color: "#D29A2D" }} />
+                </div>
+                <span className="text-[10px] font-mono" style={{ color: "#595F61" }}>Convert</span>
+              </div>
+              <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 1.4, repeat: Infinity, delay: 0.3 }}>
+                <ArrowRight size={16} style={{ color: "#D29A2D" }} />
+              </motion.div>
+              <div className="flex flex-col items-center gap-1.5 text-center flex-1">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "#141617", border: "1px solid #1E2022" }}>
+                  <Download size={16} style={{ color: "#9AA0A3" }} />
+                </div>
+                <span className="text-[10px] font-mono" style={{ color: "#595F61" }}>Any voice</span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // OWN YOUR DATA - local-first chat + free trial
 // ─────────────────────────────────────────────────────────────────────────────
 function OwnData() {
@@ -1454,6 +1655,7 @@ export default function Landing() {
       <EarnLoop />
       <SilkThread />
       <Modalities />
+      <Voice />
       <HowItWorks />
       <Providers />
       <SilkThread />
