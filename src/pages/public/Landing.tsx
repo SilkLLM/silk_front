@@ -1,5 +1,5 @@
 /**
- * Landing.tsx — SilkLLM 2026 Living Landing Page
+ * Landing.tsx - SilkLLM 2026 Living Landing Page
  * Optimized: lighter canvas, throttled mouse, no blend-mode cursor issues.
  * - Magnetic cursor (no mix-blend-mode, avoids compositing bugs)
  * - Breathing noise mesh (pauses when off-screen, ~20fps, no grid)
@@ -17,10 +17,13 @@ import React, {
 import { motion, useMotionValue, useSpring, useTransform,
          useScroll } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import {
+  ArrowRight, ChevronDown, Coins, Type, Image as ImageIcon, AudioLines,
+  Video, ShieldCheck, Sparkles, Gift,
+} from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MAGNETIC CURSOR — no mixBlendMode to prevent white-section compositing bugs
+// MAGNETIC CURSOR - no mixBlendMode to prevent white-section compositing bugs
 // ─────────────────────────────────────────────────────────────────────────────
 function MagneticCursor() {
   const cursorX  = useMotionValue(-100);
@@ -57,7 +60,7 @@ function MagneticCursor() {
 
   return (
     <>
-      {/* Ring — no mix-blend-mode, uses soft shadow for visibility */}
+      {/* Ring - no mix-blend-mode, uses soft shadow for visibility */}
       <motion.div
         className="fixed top-0 left-0 pointer-events-none z-[9999] rounded-full"
         style={{
@@ -91,7 +94,7 @@ function MagneticCursor() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BREATHING NOISE MESH — optimized: ~20fps, no grid, 2 orbs, pauses off-screen
+// BREATHING NOISE MESH - optimized: ~20fps, no grid, 2 orbs, pauses off-screen
 // ─────────────────────────────────────────────────────────────────────────────
 function NoiseMesh({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -165,7 +168,7 @@ function NoiseMesh({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
       ctx.fillStyle = bloom;
       ctx.fillRect(0, 0, W, H);
 
-      // Only 2 breathing orbs (was 3) — lighter on GPU
+      // Only 2 breathing orbs (was 3) - lighter on GPU
       [
         { bx: 0.25, by: 0.3, sx: 0.05, sy: 0.04, ts: 0.7, tc: 0.9, r: 0.36, ca: "rgba(210,154,45,", p: 0.02 },
         { bx: 0.75, by: 0.6, sx: 0.04, sy: 0.05, ts: 0.5, tc: 0.6, r: 0.28, ca: "rgba(77,78,42,",   p: 0.014 },
@@ -181,7 +184,7 @@ function NoiseMesh({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
         ctx.fillRect(0, 0, W, H);
       });
 
-      // No more grid — saves dozens of stroke calls per frame
+      // No more grid - saves dozens of stroke calls per frame
     };
 
     draw();
@@ -290,7 +293,7 @@ function TypewriterCode() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROVIDER CARD — tilt + glow on hover (unchanged visually, slightly lighter)
+// PROVIDER CARD - tilt + glow on hover (unchanged visually, slightly lighter)
 // ─────────────────────────────────────────────────────────────────────────────
 const PROVIDERS = [
   { name: "OpenAI",    color: "#74aa9c", sub: "GPT-4o · o3 · o1"        },
@@ -382,7 +385,7 @@ function ProviderCard({ name, color, sub, index }: (typeof PROVIDERS)[0] & { ind
 function AnimatedStat({ value, label, delay = 0 }: { value: string; label: string; delay?: number }) {
   const ref    = useRef<HTMLDivElement>(null);
   const fired  = useRef(false);
-  const [display, setDisplay] = useState("—");
+  const [display, setDisplay] = useState("-");
 
   useEffect(() => {
     const obs = new IntersectionObserver(
@@ -482,8 +485,8 @@ function Nav() {
 
       <div className="hidden md:flex items-center gap-8 text-sm" style={{ color: "#595F61" }}>
         {[
-          ["#how-it-works", "How It Works"],
-          ["#providers", "Providers"],
+          ["#marketplace", "Marketplace"],
+          ["#modalities", "Modalities"],
           ["#pricing", "Pricing"],
           ["/docs", "Docs"],
         ].map(([href, label]) =>
@@ -538,7 +541,7 @@ function Nav() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HERO — throttled mouse tracking so it no longer feels like "dragging mountains"
+// HERO - throttled mouse tracking so it no longer feels like "dragging mountains"
 // ─────────────────────────────────────────────────────────────────────────────
 function Hero() {
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
@@ -549,7 +552,7 @@ function Hero() {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.22], [1, 0]);
   const heroY       = useTransform(scrollYProgress, [0, 0.22], [0, -70]);
 
-  // Throttled mouse handler — max one state update per animation frame
+  // Throttled mouse handler - max one state update per animation frame
   useEffect(() => {
     const h = (e: MouseEvent) => {
       mouseRef.current = {
@@ -606,10 +609,10 @@ function Hero() {
             animate={{ scale: [1, 1.5, 1], opacity: [0.7, 1, 0.7] }}
             transition={{ duration: 1.8, repeat: Infinity }}
           />
-          ONE API - ALL PROVIDERS - ZERO COMPLEXITY
+          ONE KEY - EVERY MODEL - A LIVING MARKETPLACE
         </motion.div>
 
-        {/* headline — word by word reveal */}
+        {/* headline - word by word reveal */}
         {[
           { text: "One API.",      stroke: false, delay: 0.2 },
           { text: "One Bill.",     stroke: true,  delay: 0.38 },
@@ -636,10 +639,11 @@ function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.75 }}
-          className="text-lg md:text-xl max-w-xl mx-auto mb-10 leading-relaxed"
+          className="text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed"
           style={{ color: "#595F61" }}
         >
-          The unified gateway to all LLMs. One API key. Credit billing. Automatic fallbacks.
+          One key across text, image, audio and video. Bring your own provider key and earn credits when
+          others use it. Start free, and keep your chats on your own device.
         </motion.p>
 
         <motion.div
@@ -687,10 +691,11 @@ function Hero() {
 function StatsRow() {
   return (
     <section className="py-16 px-6" style={{ background: "#0A0A0A", borderTop: "1px solid #111314" }}>
-      <div className="max-w-3xl mx-auto grid grid-cols-3 gap-8">
-        <AnimatedStat value="5+"   label="Providers"  delay={0} />
-        <AnimatedStat value="50+"  label="Models"     delay={0.15} />
-        <AnimatedStat value="99.9" label="Uptime (%)" delay={0.3} />
+      <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-8">
+        <AnimatedStat value="5+"   label="Providers"          delay={0} />
+        <AnimatedStat value="50+"  label="Models"             delay={0.1} />
+        <AnimatedStat value="4"    label="Modalities"         delay={0.2} />
+        <AnimatedStat value="75%"  label="Earn on your keys"  delay={0.3} />
       </div>
     </section>
   );
@@ -1188,17 +1193,232 @@ function Footer() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SILK THREAD - hand-crafted animated SVG ribbon (the brand signature)
+// ─────────────────────────────────────────────────────────────────────────────
+function SilkThread({ height = 120 }: { height?: number }) {
+  return (
+    <div className="relative w-full overflow-hidden" style={{ height, background: "#080809" }} aria-hidden>
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 120" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="silkGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#D29A2D" stopOpacity="0" />
+            <stop offset="50%" stopColor="#D29A2D" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#B5B86B" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[0, 1, 2].map((i) => (
+          <motion.path
+            key={i}
+            d={`M0 ${60 + i * 6} C 300 ${20 + i * 10}, 500 ${100 - i * 8}, 700 ${60 + i * 4} S 1100 ${30 + i * 6}, 1200 ${60 - i * 4}`}
+            fill="none"
+            stroke="url(#silkGrad)"
+            strokeWidth={1.5}
+            strokeDasharray="10 16"
+            animate={{ strokeDashoffset: [0, -260] }}
+            transition={{ duration: 6 + i * 2, repeat: Infinity, ease: "linear" }}
+            style={{ opacity: 0.5 - i * 0.13 }}
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EARN LOOP - the BYOK marketplace, told as a flow
+// ─────────────────────────────────────────────────────────────────────────────
+const EARN_STEPS = [
+  { icon: <Coins size={20} />,       title: "Deposit a key",  desc: "Add your own provider key as public." },
+  { icon: <Sparkles size={20} />,    title: "Others use it",  desc: "Our engine serves other users with it." },
+  { icon: <ArrowRight size={20} />,  title: "You earn 75%",   desc: "Credited to you as SilkLLM balance." },
+  { icon: <ShieldCheck size={20} />, title: "Spend anywhere", desc: "Use credits on any model, any provider." },
+];
+
+function EarnLoop() {
+  return (
+    <section id="marketplace" className="py-28 px-6" style={{ background: "#0A0A0A" }}>
+      <div className="max-w-5xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }} transition={{ duration: 0.8 }} className="mb-16"
+        >
+          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Marketplace</p>
+          <h2 className="font-display font-bold leading-tight"
+            style={{ fontSize: "clamp(2.5rem,6vw,4.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
+            Bring your own key.
+            <br /><span style={{ color: "#D29A2D" }}>Earn while you build.</span>
+          </h2>
+          <p className="text-base leading-relaxed mt-5 max-w-xl" style={{ color: "#595F61" }}>
+            Share a key and our engine quietly uses it to serve others. You earn 75% of the provider cost as
+            credits. Public keys are never shown to anyone, and a working marketplace key always comes before ours.
+          </p>
+        </motion.div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {EARN_STEPS.map((s, i) => (
+            <motion.div
+              key={s.title}
+              initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.6, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
+              className="relative rounded-2xl px-5 py-6"
+              style={{ background: "#0F1011", border: "1px solid #1E2022" }}
+            >
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: "rgba(210,154,45,0.1)", color: "#D29A2D", border: "1px solid rgba(210,154,45,0.2)" }}>
+                {s.icon}
+              </div>
+              <div className="font-display font-semibold text-sm mb-1" style={{ color: "#EDEFF0" }}>{s.title}</div>
+              <div className="text-xs leading-relaxed" style={{ color: "#595F61" }}>{s.desc}</div>
+              <div className="absolute top-4 right-4 font-mono text-xs" style={{ color: "#22242699" }}>{`0${i + 1}`}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODALITIES - text / image / audio / video
+// ─────────────────────────────────────────────────────────────────────────────
+const MODALITIES = [
+  { icon: <Type size={22} />,       name: "Text",  sub: "GPT-4o, Claude, Gemini, Grok", color: "#D29A2D" },
+  { icon: <ImageIcon size={22} />,  name: "Image", sub: "DALL-E and more",             color: "#D0C51E" },
+  { icon: <AudioLines size={22} />, name: "Audio", sub: "Text to speech",              color: "#B5B86B" },
+  { icon: <Video size={22} />,      name: "Video", sub: "Where providers support it",  color: "#FAC059" },
+];
+
+function Modalities() {
+  return (
+    <section id="modalities" className="py-28 px-6" style={{ background: "#080809" }}>
+      <div className="max-w-5xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }} transition={{ duration: 0.8 }} className="mb-16"
+        >
+          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Modalities</p>
+          <h2 className="font-display font-bold" style={{ fontSize: "clamp(2.5rem,6vw,4.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
+            Every modality.
+            <br /><span style={{ color: "#D29A2D" }}>One gateway.</span>
+          </h2>
+        </motion.div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {MODALITIES.map((m, i) => (
+            <motion.div
+              key={m.name} data-magnetic
+              initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.6, delay: i * 0.09, ease: [0.16, 1, 0.3, 1] }}
+              whileHover={{ y: -4 }}
+              className="rounded-2xl px-6 py-7" style={{ background: "#0F1011", border: "1px solid #1E2022" }}
+            >
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: `${m.color}18`, color: m.color, border: `1px solid ${m.color}33` }}>
+                {m.icon}
+              </div>
+              <div className="font-display font-semibold text-lg mb-1" style={{ color: "#EDEFF0" }}>{m.name}</div>
+              <div className="text-xs font-mono" style={{ color: "#595F61" }}>{m.sub}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OWN YOUR DATA - local-first chat + free trial
+// ─────────────────────────────────────────────────────────────────────────────
+function OwnData() {
+  return (
+    <section className="py-28 px-6" style={{ background: "#0A0A0A" }}>
+      <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-16 items-center">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }} transition={{ duration: 0.8 }}
+        >
+          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Own your data</p>
+          <h2 className="font-display font-bold mb-6 leading-tight"
+            style={{ fontSize: "clamp(2rem,5vw,3.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
+            Your chats.
+            <br /><span style={{ color: "#D29A2D" }}>Your device.</span>
+          </h2>
+          <p className="text-base leading-relaxed mb-8" style={{ color: "#595F61" }}>
+            A full chat experience that keeps every conversation in your own browser. You choose how long it lives
+            before it dissolves. We never store your chat content. Start on a free trial, no card needed.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
+              style={{ background: "rgba(210,154,45,0.08)", color: "#D29A2D", border: "1px solid rgba(210,154,45,0.2)" }}>
+              <Gift size={15} /> Free trial for 3 months
+            </span>
+            <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
+              style={{ background: "#111314", color: "#7A8285", border: "1px solid #1E2022" }}>
+              <ShieldCheck size={15} /> Nothing stored server-side
+            </span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }} transition={{ duration: 0.8, delay: 0.15 }}
+          className="rounded-2xl p-5 space-y-3"
+          style={{ background: "#0D0E0F", border: "1px solid #1E2022", boxShadow: "0 32px 80px rgba(0,0,0,0.6)" }}
+        >
+          {[
+            { me: false, text: "Write me a haiku about silk." },
+            { me: true, text: "Threads of gold and light / weaving every model through / one quiet gateway." },
+          ].map((b, i) => (
+            <motion.div key={i}
+              initial={{ opacity: 0, x: b.me ? 20 : -20 }} whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }} transition={{ delay: 0.3 + i * 0.25 }}
+              className={`flex ${b.me ? "justify-end" : "justify-start"}`}
+            >
+              <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm"
+                style={b.me
+                  ? { background: "#D29A2D", color: "#0A0A0A" }
+                  : { background: "#141617", color: "#C2C9CC", border: "1px solid #1E2022" }}>
+                {b.text}
+              </div>
+            </motion.div>
+          ))}
+          <div className="flex items-center gap-2 pt-1">
+            <div className="flex-1 rounded-xl px-3 py-2 text-xs font-mono" style={{ background: "#141617", color: "#3A3F42", border: "1px solid #1E2022" }}>
+              Message SilkLLM...
+            </div>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "#D29A2D", color: "#0A0A0A" }}>
+              <ArrowRight size={15} />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Landing() {
+  // The custom cursor is desktop-only; touch devices keep their native behavior.
+  const [finePointer, setFinePointer] = useState(false);
+  useEffect(() => {
+    setFinePointer(typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches);
+  }, []);
+
   return (
-    <div style={{ background: "#0A0A0A", cursor: "none" }}>
-      <MagneticCursor />
+    <div style={{ background: "#0A0A0A", cursor: finePointer ? "none" : "auto" }}>
+      {finePointer && <MagneticCursor />}
       <Nav />
       <Hero />
       <StatsRow />
+      <EarnLoop />
+      <SilkThread />
+      <Modalities />
       <HowItWorks />
       <Providers />
+      <OwnData />
       <Pricing />
       <DevExperience />
       <CTA />

@@ -1,6 +1,6 @@
 /**
  * Models.tsx
- * Admin page — full CRUD for models: enable/disable, edit pricing, fallback chains, add new, delete.
+ * Admin page - full CRUD for models: enable/disable, edit pricing, fallback chains, add new, delete.
  */
 
 // File: silkllm-frontend/src/pages/admin/Models.tsx
@@ -217,7 +217,7 @@ export default function AdminModels() {
               {/* Routing Weight */}
               <div>
                 <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Routing Weight (0–100)
+                  Routing Weight (0-100)
                 </label>
                 <input
                   type="number"

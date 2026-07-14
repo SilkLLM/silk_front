@@ -7,7 +7,7 @@
  *  - Animated glowing edges between core and each provider
  *  - Particle packets travelling along the edges
  *  - Subtle mouse parallax on the whole scene
- * Lazy-loaded — never blocks first paint.
+ * Lazy-loaded - never blocks first paint.
  */
 
 // File: silkllm-frontend/src/components/SilkHero3D.tsx

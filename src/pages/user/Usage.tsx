@@ -1,13 +1,14 @@
 /**
  * Usage.tsx
- * Usage logs page — shows per-request token counts, costs, models used.
+ * Usage logs page - shows per-request token counts, costs, models used.
  */
 
 // File: silkllm-frontend/src/pages/user/Usage.tsx
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Filter } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { usageApi } from "@/services/api";
 import { format } from "date-fns";
@@ -30,6 +31,21 @@ export default function Usage() {
 
   const totalPages = data ? Math.ceil(data.total / 20) : 1;
 
+  // Analytics derived from the visible page (chronological for the chart).
+  const analytics = useMemo(() => {
+    const entries: any[] = data?.entries || [];
+    const spend = entries.filter((e) => e.amount < 0);
+    const spentTotal = spend.reduce((s, e) => s + Math.abs(e.amount), 0);
+    const tokensTotal = entries.reduce(
+      (s, e) => s + ((e.prompt_tokens || 0) + (e.completion_tokens || 0)), 0);
+    const chart = [...entries].reverse().map((e, i) => ({
+      i: i + 1,
+      cost: e.amount < 0 ? Math.abs(e.amount) : 0,
+      label: format(new Date(e.created_at), "MMM d HH:mm"),
+    }));
+    return { spentTotal, tokensTotal, count: entries.length, chart };
+  }, [data]);
+
   const getTotalTokens = (entry: any): number | null => {
     if (entry.total_tokens) return entry.total_tokens;
     if (entry.prompt_tokens !== undefined || entry.completion_tokens !== undefined) {
@@ -45,6 +61,46 @@ export default function Usage() {
           <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey">Usage</h1>
           <p className="text-warm-grey mt-1">Every API call and transaction in your account.</p>
         </div>
+
+        {/* Analytics */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="card">
+            <p className="text-xs text-warm-grey uppercase tracking-wide">Spent (this page)</p>
+            <p className="text-2xl font-bold text-silk-gold mt-1">${analytics.spentTotal.toFixed(4)}</p>
+          </div>
+          <div className="card">
+            <p className="text-xs text-warm-grey uppercase tracking-wide">Tokens</p>
+            <p className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey mt-1">{analytics.tokensTotal.toLocaleString()}</p>
+          </div>
+          <div className="card">
+            <p className="text-xs text-warm-grey uppercase tracking-wide">Records</p>
+            <p className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey mt-1">{analytics.count}</p>
+          </div>
+        </div>
+
+        {analytics.chart.length > 1 && (
+          <div className="card">
+            <p className="text-xs text-warm-grey uppercase tracking-wide mb-2">Spend over recent activity</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <AreaChart data={analytics.chart}>
+                <defs>
+                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#D29A2D" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#D29A2D" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="i" tick={{ fontSize: 11, fill: "#C2C9CC" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#C2C9CC" }} width={48} />
+                <Tooltip
+                  formatter={(v: any) => `$${Number(v).toFixed(6)}`}
+                  labelFormatter={(l: any) => analytics.chart[l - 1]?.label || ""}
+                  contentStyle={{ background: "#383B3D", border: "none", borderRadius: 8, color: "#EDEFF0" }}
+                />
+                <Area type="monotone" dataKey="cost" stroke="#D29A2D" strokeWidth={2} fill="url(#spendGrad)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -94,10 +150,10 @@ export default function Usage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-deep-charcoal dark:text-cloud-grey font-mono text-xs">
-                          {e.model || "—"}
+                          {e.model || "-"}
                         </td>
                         <td className="px-4 py-3 text-warm-grey">
-                          {totalTokens !== null ? totalTokens.toLocaleString() : "—"}
+                          {totalTokens !== null ? totalTokens.toLocaleString() : "-"}
                         </td>
                         <td className={`px-4 py-3 font-semibold ${e.amount < 0 ? "text-red-400" : "text-green-400"}`}>
                           {e.amount > 0 ? "+" : ""}${Math.abs(e.amount).toFixed(6)}

@@ -1,7 +1,7 @@
 /**
  * Login.tsx
  * OAuth login page. Offers Google and GitHub sign-in options.
- * No password fields — OAuth only.
+ * No password fields - OAuth only.
  */
 
 // File: silkllm-frontend/src/pages/auth/Login.tsx

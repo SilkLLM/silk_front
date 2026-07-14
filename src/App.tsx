@@ -23,11 +23,16 @@ const UserDashboard = lazy(() => import("@/pages/user/Dashboard"));
 const ApiKeys       = lazy(() => import("@/pages/user/ApiKeys"));
 const Billing       = lazy(() => import("@/pages/user/Billing"));
 const Usage         = lazy(() => import("@/pages/user/Usage"));
+const ProviderHub   = lazy(() => import("@/pages/user/ProviderHub"));
+const Notifications = lazy(() => import("@/pages/user/Notifications"));
+const Chat          = lazy(() => import("@/pages/user/Chat"));
 const AdminProviders    = lazy(() => import("@/pages/admin/Providers"));
 const AdminModels       = lazy(() => import("@/pages/admin/Models"));
 const AdminTopups       = lazy(() => import("@/pages/admin/Topups"));
 const AdminAlerts       = lazy(() => import("@/pages/admin/Alerts"));
 const AdminCredits      = lazy(() => import("@/pages/admin/Credits"));
+const AdminMarketplace  = lazy(() => import("@/pages/admin/Marketplace"));
+const AdminSettings     = lazy(() => import("@/pages/admin/Settings"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -77,14 +82,19 @@ function AppRoutes() {
         <Route path="/dashboard/keys"    element={<ProtectedRoute><ApiKeys /></ProtectedRoute>} />
         <Route path="/dashboard/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
         <Route path="/dashboard/usage"   element={<ProtectedRoute><Usage /></ProtectedRoute>} />
+        <Route path="/dashboard/provider-hub"  element={<ProtectedRoute><ProviderHub /></ProtectedRoute>} />
+        <Route path="/dashboard/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        <Route path="/dashboard/chat"    element={<ProtectedRoute><Chat /></ProtectedRoute>} />
 
         {/* Admin dashboard */}
         <Route path="/admin"            element={<AdminRoute><AdminProviders /></AdminRoute>} />
         <Route path="/admin/providers"  element={<AdminRoute><AdminProviders /></AdminRoute>} />
         <Route path="/admin/models"     element={<AdminRoute><AdminModels /></AdminRoute>} />
+        <Route path="/admin/marketplace" element={<AdminRoute><AdminMarketplace /></AdminRoute>} />
         <Route path="/admin/topups"     element={<AdminRoute><AdminTopups /></AdminRoute>} />
         <Route path="/admin/alerts"     element={<AdminRoute><AdminAlerts /></AdminRoute>} />
         <Route path="/admin/credits"    element={<AdminRoute><AdminCredits /></AdminRoute>} />
+        <Route path="/admin/settings"   element={<AdminRoute><AdminSettings /></AdminRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

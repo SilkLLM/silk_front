@@ -171,6 +171,47 @@ export const generateApi = {
   },
 };
 
+// ── BYOK marketplace: the user's own deposited keys ────────────────────────
+export const providerKeysApi = {
+  list: () => api.get("/provider-keys"),
+  deposit: (data: {
+    provider_id: string;
+    api_key: string;
+    label?: string;
+    is_public?: boolean;
+    is_free_key?: boolean;
+    serve_owner_with_own_key?: boolean;
+    daily_limit_usd?: number;
+    declared_budget_usd?: number;
+  }) => api.post("/provider-keys", data),
+  update: (id: string, data: any) => api.patch(`/provider-keys/${id}`, data),
+  revoke: (id: string) => api.delete(`/provider-keys/${id}`),
+};
+
+// ── Free trial ──────────────────────────────────────────────────────────────
+export const trialApi = {
+  status: () => api.get("/trial"),
+};
+
+// ── Dashboard notifications ─────────────────────────────────────────────────
+export const notificationsApi = {
+  list: (unreadOnly = false, page = 1) =>
+    api.get("/notifications", { params: { unread_only: unreadOnly, page } }),
+  unreadCount: () => api.get("/notifications/unread-count"),
+  markRead: (id: string) => api.post(`/notifications/${id}/read`),
+  markAllRead: () => api.post("/notifications/read-all"),
+};
+
+// ── Multimodal generation (uses the session token) ─────────────────────────
+export const mediaApi = {
+  image: (data: { prompt: string; model?: string; provider?: string; n?: number; size?: string }) =>
+    api.post("/generate/image", data),
+  audio: (data: { prompt: string; model?: string; provider?: string; voice?: string }) =>
+    api.post("/generate/audio", data),
+  video: (data: { prompt: string; model?: string; provider?: string; seconds?: number }) =>
+    api.post("/generate/video", data),
+};
+
 // Admin APIs (full CRUD)
 export const adminApi = {
   providers: {
@@ -213,6 +254,23 @@ export const adminApi = {
     ledger: (page = 1) => api.get("/admin/credits/ledger", { params: { page } }),
     users: () => api.get("/admin/credits/users"),
     refund: (data: any) => api.post("/admin/credits/refund", data),
+  },
+  settings: {
+    list: () => api.get("/admin/settings"),
+    update: (key: string, value: number) => api.patch(`/admin/settings/${key}`, { value }),
+  },
+  marketplace: {
+    keys: (params: { sort?: string; search?: string; status?: string; page?: number; page_size?: number }) =>
+      api.get("/admin/marketplace/keys", { params }),
+    analytics: () => api.get("/admin/marketplace/analytics"),
+    owners: () => api.get("/admin/marketplace/owners"),
+    suspend: (id: string) => api.post(`/admin/marketplace/keys/${id}/suspend`),
+    activate: (id: string) => api.post(`/admin/marketplace/keys/${id}/activate`),
+  },
+  killswitch: {
+    list: () => api.get("/admin/killswitch"),
+    set: (key: string, enabled: boolean, reason?: string) =>
+      api.post(`/admin/killswitch/${key}`, { enabled, reason }),
   },
 };
 

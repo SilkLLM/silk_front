@@ -1,6 +1,6 @@
 /**
  * Providers.tsx
- * Admin page — manage LLM providers, toggle enabled state, update API keys, set alert thresholds.
+ * Admin page - manage LLM providers, toggle enabled state, update API keys, set alert thresholds.
  * Full CRUD: add new provider, delete provider.
  * Now shows a masked preview of existing API keys with eye toggle.
  */
@@ -139,7 +139,7 @@ export default function AdminProviders() {
               const balancePct = p.last_topup_amount > 0
                 ? (p.last_known_balance / p.last_topup_amount) * 100 : null;
               const isLow = balancePct !== null && balancePct <= p.alert_threshold_percent;
-              // For preview, we need the actual key value – but backend doesn't return it for security.
+              // For preview, we need the actual key value - but backend doesn't return it for security.
               // So we just show a masked placeholder and allow update.
               const hasKey = p.has_api_key;
               

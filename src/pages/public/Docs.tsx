@@ -1,6 +1,6 @@
 /**
  * Docs.tsx
- * Public documentation page — quickstart, API reference, SDK examples.
+ * Public documentation page - quickstart, API reference, SDK examples.
  * Dark-first redesign for readability.
  */
 
@@ -8,7 +8,10 @@
 
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Copy, CheckCircle, BookOpen, Key, Zap, Layers, Code2, AlertTriangle, ChevronRight } from "lucide-react";
+import {
+  Copy, CheckCircle, BookOpen, Key, Zap, Layers, Code2, AlertTriangle, ChevronRight,
+  Coins, Gift, Image as ImageIcon, MessageSquare,
+} from "lucide-react";
 
 const CODE = {
   pyInstall: `pip install silkllm`,
@@ -18,7 +21,7 @@ client = silkllm.Client(api_key="silk_your_key_here")
 
 response = client.generate(
     messages=[{"role": "user", "content": "Explain quantum computing simply."}],
-    model="gpt-4o",          # optional — omit to use cheapest available
+    model="gpt-4o",          # optional - omit to use cheapest available
     temperature=0.7,
     max_tokens=1024,
 )
@@ -62,8 +65,45 @@ console.log(\`Cost: $\${response.cost_usd}\`);`,
   authHeader: `Authorization: Bearer silk_your_api_key_here`,
 
   modelsExample: `curl /api/models -H "Authorization: Bearer silk_..."
+# Each model returns modality (text|image|audio|video) and is_free.
 # Filter by provider:
 curl /api/models?provider=anthropic -H "Authorization: Bearer silk_..."`,
+
+  byokPy: `import silkllm
+client = silkllm.Client(api_key="silk_your_key")
+
+# Deposit your own provider key. Public means our engine may use it to
+# serve other users, and you earn 75% of the provider cost as credits.
+key = client.deposit_provider_key(
+    provider_id="openai",
+    api_key="sk-your-openai-key",
+    label="my key",
+    is_public=True,
+    declared_budget_usd=50,      # we never spend past this
+)
+
+# See your keys, earnings, and requests served.
+for k in client.list_provider_keys():
+    print(k.label, "earned", k.earned_credits_total, "served", k.requests_served)
+
+# Opt out of using your own key for your own requests (still serves others):
+client.update_provider_key(key.id, serve_owner_with_own_key=False)`,
+
+  trialPy: `t = client.trial_status()
+print(t.active, t.daily_remaining_usd, "of", t.daily_limit_usd, "left today")`,
+
+  mediaPy: `# Image generation
+img = client.generate_image(prompt="a silk ribbon", model="dall-e-3", n=2)
+print(img.count, img.images)
+
+# Audio (text to speech), returned as base64
+audio = client.generate_audio(prompt="Hello from SilkLLM", model="tts-1")
+print(audio.format, len(audio.audio_b64))`,
+
+  mediaCurl: `curl /api/generate/image \\
+  -H "Authorization: Bearer silk_your_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"prompt": "a silk ribbon", "model": "dall-e-3", "n": 2}'`,
 };
 
 // ── Syntax-aware token colorizer ─────────────────────────────────────────────
@@ -73,16 +113,16 @@ function colorize(line: string, lang: string): React.ReactNode[] {
   }
 
   const tokens: React.ReactNode[] = [];
-  // Very lightweight tokenizer — handles the patterns in our snippets
+  // Very lightweight tokenizer - handles the patterns in our snippets
   const patterns: [RegExp, string][] = [
-    [/(#.*)$/,                                  "#595F61"],   // comments — muted
-    [/("(?:[^"\\]|\\.)*")/g,                   "#B5B86B"],   // strings — warm olive
-    [/\b(import|from|for|print|const|await|console\.log|new)\b/g, "#D0C51E"], // keywords — electric yellow
-    [/\b(silkllm|SilkLLM|client|response|chunk)\b/g, "#74aa9c"], // identifiers — teal
-    [/\b(True|False|None|null|undefined)\b/g,  "#D97757"],   // literals — orange
-    [/(silk_[a-z_]+)/g,                        "#D29A2D"],   // API keys — gold
+    [/(#.*)$/,                                  "#595F61"],   // comments - muted
+    [/("(?:[^"\\]|\\.)*")/g,                   "#B5B86B"],   // strings - warm olive
+    [/\b(import|from|for|print|const|await|console\.log|new)\b/g, "#D0C51E"], // keywords - electric yellow
+    [/\b(silkllm|SilkLLM|client|response|chunk)\b/g, "#74aa9c"], // identifiers - teal
+    [/\b(True|False|None|null|undefined)\b/g,  "#D97757"],   // literals - orange
+    [/(silk_[a-z_]+)/g,                        "#D29A2D"],   // API keys - gold
     [/(\$\{[^}]+\})/g,                         "#D0C51E"],   // template literals
-    [/(\d+\.?\d*)/g,                           "#D29A2D"],   // numbers — gold
+    [/(\d+\.?\d*)/g,                           "#D29A2D"],   // numbers - gold
   ];
 
   // Check for comment first (line-level)
@@ -240,6 +280,10 @@ const NAV_SECTIONS = [
   { id: "authentication", label: "Authentication",    icon: <Key size={13} /> },
   { id: "generate",       label: "POST /generate",   icon: <Zap size={13} /> },
   { id: "models",         label: "GET /models",      icon: <Layers size={13} /> },
+  { id: "marketplace",    label: "BYOK Marketplace", icon: <Coins size={13} /> },
+  { id: "trials",         label: "Free Trials",      icon: <Gift size={13} /> },
+  { id: "multimodal",     label: "Multimodal",       icon: <ImageIcon size={13} /> },
+  { id: "chat",           label: "Chat and Data",    icon: <MessageSquare size={13} /> },
   { id: "sdks",           label: "SDKs",             icon: <Code2 size={13} /> },
   { id: "errors",         label: "Error Reference",  icon: <AlertTriangle size={13} /> },
 ];
@@ -395,7 +439,7 @@ export default function Docs() {
                 ["messages",    "array",  "Required. Conversation history [{role, content}]"],
                 ["model",       "string", "Optional. Model ID e.g. gpt-4o, claude-3-5-sonnet-20241022"],
                 ["provider",    "string", "Optional. Provider hint e.g. openai, anthropic"],
-                ["temperature", "float",  "0.0–2.0 (default 0.7)"],
+                ["temperature", "float",  "0.0-2.0 (default 0.7)"],
                 ["max_tokens",  "int",    "Max tokens to generate (default 2048)"],
                 ["stream",      "bool",   "Enable SSE streaming (default false)"],
               ]}
@@ -412,6 +456,87 @@ export default function Docs() {
               List all available models with per-token pricing. Filter by provider with a query param.
             </p>
             <CodeBlock code={CODE.modelsExample} lang="bash" />
+          </Section>
+
+          {/* ── BYOK Marketplace ───────────────────────────────────── */}
+          <Section id="marketplace" title="BYOK Marketplace" icon={<Coins size={15} />}>
+            <p className="mb-4 leading-relaxed" style={{ color: "#9AA0A3" }}>
+              Deposit your own provider keys. A <strong style={{ color: "#EDEFF0" }}>public</strong> key is used
+              only by our routing engine to serve other users (never shown to anyone), and you earn 75% of the
+              provider cost as SilkLLM credits, spendable on any model. A <strong style={{ color: "#EDEFF0" }}>private</strong> key
+              serves only you.
+            </p>
+            <CodeBlock code={CODE.byokPy} lang="python" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider mt-6 mb-3" style={{ color: "#595F61" }}>Endpoints</h3>
+            <DocTable
+              headers={["Method", "Path", "Description"]}
+              rows={[
+                ["POST",   "/api/provider-keys",      "Deposit a key (encrypted, never returned)"],
+                ["GET",    "/api/provider-keys",      "List your keys with earnings and requests served"],
+                ["PATCH",  "/api/provider-keys/{id}", "Update visibility, budget, or serve-with-own-key"],
+                ["DELETE", "/api/provider-keys/{id}", "Revoke a key (stops being used immediately)"],
+              ]}
+            />
+            <h3 className="text-sm font-semibold uppercase tracking-wider mt-6 mb-3" style={{ color: "#595F61" }}>Pricing</h3>
+            <DocTable
+              headers={["Path", "You pay", "Owner earns"]}
+              rows={[
+                ["Platform key or anyone else's public key", "provider cost + 10%", "-"],
+                ["Someone else's public key (they own it)",  "provider cost + 10%", "75% of provider cost"],
+                ["Your own public key",                      "provider cost + 10%", "nothing (no self-crediting)"],
+                ["Your own private key",                     "provider cost + 25%", "nothing"],
+                ["Free model or free key",                   "0",                   "0"],
+              ]}
+            />
+            <Callout>
+              Public keys are used only by the backend and are never visible to other users. A working
+              marketplace key with budget always takes priority over the platform key.
+            </Callout>
+          </Section>
+
+          {/* ── Free Trials ────────────────────────────────────────── */}
+          <Section id="trials" title="Free Trials" icon={<Gift size={15} />}>
+            <p className="mb-4 leading-relaxed" style={{ color: "#9AA0A3" }}>
+              Every new account gets a daily free allowance for the first three months, enforced at the gateway
+              so it works through the API and SDKs too. When your balance cannot cover a request, an active trial
+              covers it at no charge (served by free models or the platform key).
+            </p>
+            <CodeBlock code={CODE.trialPy} lang="python" />
+            <p className="text-sm leading-relaxed" style={{ color: "#9AA0A3" }}>
+              Check remaining allowance with <Pill>GET /api/trial</Pill>. The daily limit is set by the platform
+              and can change over time.
+            </p>
+          </Section>
+
+          {/* ── Multimodal ─────────────────────────────────────────── */}
+          <Section id="multimodal" title="Multimodal" icon={<ImageIcon size={15} />}>
+            <p className="mb-4 leading-relaxed" style={{ color: "#9AA0A3" }}>
+              Generate images, audio, and video through dedicated endpoints that share the same routing,
+              marketplace, and billing as text. Pricing is per unit (per image, per character, per second).
+            </p>
+            <CodeBlock code={CODE.mediaCurl} lang="bash" />
+            <CodeBlock code={CODE.mediaPy} lang="python" />
+            <DocTable
+              headers={["Method", "Path", "Description"]}
+              rows={[
+                ["POST", "/api/generate/image", "Image generation (returns URLs or base64)"],
+                ["POST", "/api/generate/audio", "Text to speech (returns base64 audio)"],
+                ["POST", "/api/generate/video", "Video generation, where a provider supports it"],
+              ]}
+            />
+          </Section>
+
+          {/* ── Chat and Data ──────────────────────────────────────── */}
+          <Section id="chat" title="Chat and Your Data" icon={<MessageSquare size={15} />}>
+            <p className="mb-4 leading-relaxed" style={{ color: "#9AA0A3" }}>
+              The dashboard includes a full chat client that is local-first: your conversations live only in your
+              own browser and you choose how long they are kept before they dissolve. SilkLLM never stores your
+              chat content; only usage metadata (tokens, cost, model) is recorded, the same as any API call.
+            </p>
+            <Callout>
+              Open the chat from your <Link to="/login" className="underline decoration-dotted" style={{ color: "#D29A2D" }}>dashboard</Link>.
+              It works on your balance, your free trial, or your own deposited key.
+            </Callout>
           </Section>
 
           {/* ── SDKs ───────────────────────────────────────────────── */}
@@ -436,11 +561,11 @@ export default function Docs() {
               headers={["Code", "HTTP", "Description"]}
               rows={[
                 ["authentication_error",  "401", "Missing or invalid API key"],
-                ["insufficient_balance",  "402", "Not enough credits — add more in billing"],
+                ["insufficient_balance",  "402", "Not enough credits - add more in billing"],
                 ["model_not_found",       "404", "Model doesn't exist or is disabled"],
                 ["validation_error",      "422", "Invalid request body"],
-                ["rate_limit_exceeded",   "429", "Too many requests — slow down"],
-                ["provider_error",        "502", "Upstream provider failed — fallback attempted"],
+                ["rate_limit_exceeded",   "429", "Too many requests - slow down"],
+                ["provider_error",        "502", "Upstream provider failed - fallback attempted"],
               ]}
             />
           </Section>

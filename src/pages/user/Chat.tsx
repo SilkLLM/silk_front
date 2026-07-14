@@ -1,0 +1,218 @@
+/**
+ * Chat.tsx
+ * A local-first chat client. Conversations live only in this browser's
+ * localStorage; SilkLLM never stores your chat content. You choose how long a
+ * chat is kept before it auto-dissolves. Streams responses from any text model.
+ */
+
+// File: silkllm-frontend/src/pages/user/Chat.tsx
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck } from "lucide-react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import Markdown from "@/components/Markdown";
+import { modelsApi, generateApi } from "@/services/api";
+
+type Role = "user" | "assistant" | "system";
+interface Msg { role: Role; content: string; }
+interface Conversation { id: string; title: string; model: string; createdAt: number; updatedAt: number; messages: Msg[]; }
+interface ChatStore { version: number; expiryDays: number; conversations: Conversation[]; }
+
+const KEY = "silk_chats";
+const EXPIRY_OPTIONS = [
+  { label: "This session", days: 0 },
+  { label: "1 day", days: 1 },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
+  { label: "Never", days: -1 },
+];
+
+function loadStore(): ChatStore {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || "");
+    if (raw && Array.isArray(raw.conversations)) return raw;
+  } catch { /* ignore */ }
+  return { version: 1, expiryDays: 7, conversations: [] };
+}
+
+function purge(store: ChatStore): ChatStore {
+  if (store.expiryDays < 0) return store; // never
+  if (store.expiryDays === 0) return { ...store, conversations: [] }; // session-only
+  const cutoff = Date.now() - store.expiryDays * 86_400_000;
+  return { ...store, conversations: store.conversations.filter((c) => c.updatedAt >= cutoff) };
+}
+
+function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+export default function Chat() {
+  const [store, setStore] = useState<ChatStore>(() => purge(loadStore()));
+  const [activeId, setActiveId] = useState<string | null>(store.conversations[0]?.id || null);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [liveText, setLiveText] = useState("");
+  const stopRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: models } = useQuery({
+    queryKey: ["chat-models"],
+    queryFn: () => modelsApi.list().then((r) => r.data.models.filter((m: any) => (m.modality || "text") === "text")),
+  });
+  const [model, setModel] = useState<string>("");
+  useEffect(() => { if (!model && models?.length) setModel(models[0].id); }, [models, model]);
+
+  useEffect(() => { localStorage.setItem(KEY, JSON.stringify(store)); }, [store]);
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [activeId, liveText, store]);
+
+  const active = useMemo(() => store.conversations.find((c) => c.id === activeId) || null, [store, activeId]);
+
+  function newChat() {
+    const c: Conversation = { id: uid(), title: "New chat", model, createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+    setStore((s) => ({ ...s, conversations: [c, ...s.conversations] }));
+    setActiveId(c.id);
+  }
+
+  function deleteChat(id: string) {
+    setStore((s) => ({ ...s, conversations: s.conversations.filter((c) => c.id !== id) }));
+    if (activeId === id) setActiveId(null);
+  }
+
+  function updateConversation(id: string, updater: (c: Conversation) => Conversation) {
+    setStore((s) => ({ ...s, conversations: s.conversations.map((c) => (c.id === id ? updater(c) : c)) }));
+  }
+
+  async function send() {
+    if (!input.trim() || streaming) return;
+    let convId = activeId;
+    if (!convId) {
+      const c: Conversation = { id: uid(), title: input.slice(0, 40), model, createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+      setStore((s) => ({ ...s, conversations: [c, ...s.conversations] }));
+      convId = c.id;
+      setActiveId(convId);
+    }
+    const userMsg: Msg = { role: "user", content: input.trim() };
+    const history = (store.conversations.find((c) => c.id === convId)?.messages || []).concat(userMsg);
+    updateConversation(convId!, (c) => ({
+      ...c, messages: history, updatedAt: Date.now(),
+      title: c.messages.length === 0 ? input.slice(0, 40) : c.title,
+    }));
+    setInput("");
+    setStreaming(true);
+    setLiveText("");
+    stopRef.current = false;
+
+    let acc = "";
+    await generateApi.streamGenerate(
+      { messages: history.map((m) => ({ role: m.role, content: m.content })), model, stream: true },
+      (chunk) => { if (!stopRef.current) { acc += chunk; setLiveText(acc); } },
+      (err) => { acc = acc || `Error: ${err}`; },
+      () => {},
+    );
+
+    updateConversation(convId!, (c) => ({
+      ...c, messages: c.messages.concat({ role: "assistant", content: acc || "(no response)" }), updatedAt: Date.now(),
+    }));
+    setLiveText("");
+    setStreaming(false);
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="flex gap-4 h-[calc(100vh-8rem)]">
+        {/* Conversation list */}
+        <div className="hidden md:flex w-64 flex-col card p-3 shrink-0">
+          <button onClick={newChat} className="btn-primary w-full flex items-center justify-center gap-2 text-sm">
+            <Plus size={16} /> New chat
+          </button>
+          <div className="flex-1 overflow-y-auto mt-3 space-y-1">
+            {store.conversations.length === 0 && <p className="text-xs text-warm-grey px-2">No chats yet.</p>}
+            {store.conversations.map((c) => (
+              <div key={c.id}
+                className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer text-sm ${
+                  c.id === activeId ? "bg-silk-gold/10 text-silk-gold" : "text-warm-grey hover:bg-cloud-grey dark:hover:bg-deep-charcoal"
+                }`}
+                onClick={() => setActiveId(c.id)}
+              >
+                <MessageSquare size={14} className="shrink-0" />
+                <span className="flex-1 truncate">{c.title}</span>
+                <button onClick={(e) => { e.stopPropagation(); deleteChat(c.id); }}
+                  className="opacity-0 group-hover:opacity-100 text-warm-grey hover:text-red-400">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-muted-metal/40">
+            <label className="text-[11px] text-warm-grey flex items-center gap-1 mb-1">
+              <ShieldCheck size={12} className="text-silk-gold" /> Keep chats for
+            </label>
+            <select className="input text-xs py-1.5" value={store.expiryDays}
+              onChange={(e) => setStore((s) => ({ ...s, expiryDays: parseInt(e.target.value) }))}>
+              {EXPIRY_OPTIONS.map((o) => <option key={o.days} value={o.days}>{o.label}</option>)}
+            </select>
+            <p className="text-[10px] text-muted-metal mt-1.5">Stored only in this browser. We never keep your chats.</p>
+          </div>
+        </div>
+
+        {/* Chat pane */}
+        <div className="flex-1 flex flex-col card p-0 overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-muted-metal/40">
+            <MessageSquare size={16} className="text-silk-gold" />
+            <select className="input py-1.5 text-sm max-w-[220px]" value={model} onChange={(e) => setModel(e.target.value)}>
+              {(models || []).map((m: any) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+            </select>
+            <button onClick={newChat} className="md:hidden ml-auto text-silk-gold"><Plus size={18} /></button>
+          </div>
+
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+            {!active || active.messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center">
+                <MessageSquare size={30} className="text-muted-metal mb-3" />
+                <p className="text-warm-grey text-sm">Start a conversation. Your chats stay on this device.</p>
+              </div>
+            ) : (
+              active.messages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
+                    m.role === "user" ? "bg-silk-gold text-white whitespace-pre-wrap" : "bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey"
+                  }`}>
+                    {m.role === "user" ? m.content : <Markdown text={m.content} />}
+                  </div>
+                </div>
+              ))
+            )}
+            {streaming && (
+              <div className="flex justify-start">
+                <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey">
+                  {liveText ? <Markdown text={liveText} /> : <span className="text-warm-grey">Thinking...</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-3 border-t border-muted-metal/40 flex items-end gap-2">
+            <textarea
+              className="input flex-1 resize-none max-h-32"
+              rows={1}
+              placeholder="Message SilkLLM..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            />
+            {streaming ? (
+              <button onClick={() => { stopRef.current = true; }} className="btn-secondary shrink-0" title="Stop">
+                <Square size={16} />
+              </button>
+            ) : (
+              <button onClick={send} disabled={!input.trim()} className="btn-primary shrink-0 disabled:opacity-50" title="Send">
+                <Send size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
+
+// EOF silkllm-frontend/src/pages/user/Chat.tsx

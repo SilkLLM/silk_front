@@ -1,6 +1,6 @@
 /**
  * Billing.tsx
- * Credit purchase page — Stripe (USD) and Paystack (NGN).
+ * Credit purchase page - Stripe (USD) and Paystack (NGN).
  * Shows current balance, purchase form, and transaction history.
  * Now shows live exchange rate + 10% markup for Paystack.
  */

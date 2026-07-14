@@ -1,17 +1,20 @@
 /**
  * Credits.tsx
- * Admin page — financial ledger view, user list with balances, issue refunds.
+ * Admin page - financial ledger view, user list with balances, issue refunds.
  */
 
 // File: silkllm-frontend/src/pages/admin/Credits.tsx
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, BookOpen, Gift } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
 import { format } from "date-fns";
+
+const BAL_COLORS = ["#D29A2D", "#D0C51E", "#B5B86B", "#FAC059", "#DCE083", "#A87B22", "#8F9254", "#7D5A17"];
 
 type Tab = "ledger" | "users" | "refund";
 
@@ -47,6 +50,11 @@ export default function AdminCredits() {
     onError: () => toast.error("Refund failed."),
   });
 
+  const topBalances = useMemo(() =>
+    (users || []).slice().sort((a: any, b: any) => b.balance - a.balance).slice(0, 8)
+      .map((u: any) => ({ name: (u.email || "").split("@")[0].slice(0, 12), balance: u.balance })),
+  [users]);
+
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "users",  label: "Users",   icon: <Users size={16} /> },
     { key: "ledger", label: "Ledger",  icon: <BookOpen size={16} /> },
@@ -77,7 +85,24 @@ export default function AdminCredits() {
 
         {/* Users tab */}
         {tab === "users" && (
+          <>
+            {topBalances.length > 1 && (
+              <div className="card">
+                <p className="text-xs text-warm-grey uppercase tracking-wide mb-2">Top balances</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={topBalances}>
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#C2C9CC" }} interval={0} angle={-20} textAnchor="end" height={50} />
+                    <YAxis tick={{ fontSize: 11, fill: "#C2C9CC" }} width={44} />
+                    <Tooltip formatter={(v: any) => `$${Number(v).toFixed(4)}`} contentStyle={{ background: "#383B3D", border: "none", borderRadius: 8, color: "#EDEFF0" }} />
+                    <Bar dataKey="balance" radius={[4, 4, 0, 0]}>
+                      {topBalances.map((_: any, i: number) => <Cell key={i} fill={BAL_COLORS[i % BAL_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           <div className="card p-0 overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-cloud-grey dark:bg-deep-charcoal border-b border-muted-metal">
                 <tr>
@@ -101,7 +126,9 @@ export default function AdminCredits() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
+          </>
         )}
 
         {/* Ledger tab */}
@@ -122,7 +149,7 @@ export default function AdminCredits() {
                   ) : ledger?.map((e: any) => (
                     <tr key={e.id} className="hover:bg-soft-cream dark:hover:bg-slate-dark">
                       <td className="px-4 py-3 text-warm-grey text-xs">{format(new Date(e.created_at), "MMM d HH:mm")}</td>
-                      <td className="px-4 py-3 text-xs text-warm-grey">{e.user_email || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-warm-grey">{e.user_email || "-"}</td>
                       <td className="px-4 py-3"><span className="badge-info">{e.entry_type}</span></td>
                       <td className={`px-4 py-3 font-semibold text-sm ${e.amount < 0 ? "text-red-400" : "text-green-400"}`}>
                         {e.amount > 0 ? "+" : ""}${Math.abs(e.amount).toFixed(6)}

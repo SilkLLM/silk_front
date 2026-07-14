@@ -1,6 +1,6 @@
 /**
  * Alerts.tsx
- * Admin page — view and acknowledge system alerts (low balance, provider down, error spike).
+ * Admin page - view and acknowledge system alerts (low balance, provider down, error spike).
  */
 
 // File: silkllm-frontend/src/pages/admin/Alerts.tsx
@@ -47,7 +47,7 @@ export default function AdminAlerts() {
                 <span className="badge-warning text-xs px-2 py-0.5">{unacknowledged} new</span>
               )}
             </h1>
-            <p className="text-warm-grey mt-1">System health alerts — low balance, provider outages, error spikes.</p>
+            <p className="text-warm-grey mt-1">System health alerts - low balance, provider outages, error spikes.</p>
           </div>
           <button onClick={() => setUnackedOnly(u => !u)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all min-h-[44px] ${

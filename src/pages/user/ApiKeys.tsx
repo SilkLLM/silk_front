@@ -1,6 +1,6 @@
 /**
  * ApiKeys.tsx
- * API key management page — create, list, and revoke keys.
+ * API key management page - create, list, and revoke keys.
  * Now stores raw key values in localStorage for playground reuse.
  */
 
@@ -108,7 +108,7 @@ export default function ApiKeys() {
             <div className="flex items-start gap-3">
               <AlertCircle size={20} className="text-silk-gold shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-silk-gold">Save your key — it won't be shown again</p>
+                <p className="font-semibold text-silk-gold">Save your key - it won't be shown again</p>
                 <p className="text-warm-grey text-sm mb-3">Key: <strong>{createdKey.name}</strong></p>
                 <div className="flex items-center gap-2 bg-deep-charcoal rounded-lg px-4 py-2.5 font-mono text-sm text-cloud-grey overflow-x-auto">
                   <span className="flex-1 truncate">{createdKey.key}</span>
@@ -120,7 +120,7 @@ export default function ApiKeys() {
               </div>
             </div>
             <button onClick={() => setCreatedKey(null)} className="text-xs text-warm-grey mt-3 hover:text-silk-gold transition-colors">
-              I've saved my key — dismiss
+              I've saved my key - dismiss
             </button>
           </div>
         )}

@@ -15,11 +15,11 @@ import { Link } from "react-router-dom";
 import {
   CreditCard, Key, BarChart2, ArrowRight, TrendingUp, Zap,
   Send, Loader2, Code, Terminal, ChevronDown, ChevronUp, Copy, Check,
-  ToggleLeft, ToggleRight, Server, Cpu, Clock
+  ToggleLeft, ToggleRight, Server, Cpu, Clock, Gift, CheckCircle2
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
-import { usageApi, modelsApi, generateApi } from "@/services/api";
+import { usageApi, modelsApi, generateApi, trialApi, providerKeysApi } from "@/services/api";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -462,6 +462,65 @@ function AvailableProvidersModels({ models }: { models: Model[] }) {
 }
 
 // Main Dashboard
+function TrialAndOnboarding() {
+  const { user } = useAuth();
+  const { data: trial } = useQuery({
+    queryKey: ["trial-status"],
+    queryFn: () => trialApi.status().then((r) => r.data),
+  });
+  const { data: keys } = useQuery({
+    queryKey: ["provider-keys-count"],
+    queryFn: () => providerKeysApi.list().then((r) => r.data),
+  });
+
+  const hasBalance = (user?.balance || 0) > 0;
+  const hasKey = (keys || []).length > 0;
+  let hasChat = false;
+  try { hasChat = JSON.parse(localStorage.getItem("silk_chats") || "{}")?.conversations?.length > 0; } catch { /* ignore */ }
+
+  const steps = [
+    { done: true, label: "Create your account", to: "/dashboard" },
+    { done: hasChat, label: "Try the chat", to: "/dashboard/chat" },
+    { done: hasKey, label: "Deposit a key and start earning", to: "/dashboard/provider-hub" },
+    { done: hasBalance, label: "Add credits (or use your free trial)", to: "/dashboard/billing" },
+  ];
+  const remaining = steps.filter((s) => !s.done).length;
+
+  const trialPct = trial && trial.daily_limit_usd > 0
+    ? Math.max(0, Math.min(100, (trial.daily_remaining_usd / trial.daily_limit_usd) * 100)) : 0;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {trial?.active && (
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <span className="text-warm-grey text-sm flex items-center gap-1.5"><Gift size={15} className="text-silk-gold" /> Free trial</span>
+            <span className="text-xs text-warm-grey">{trial.days_remaining}d left</span>
+          </div>
+          <div className="mt-3 h-2 rounded-full bg-cloud-grey dark:bg-deep-charcoal overflow-hidden">
+            <div className="h-full bg-silk-gold" style={{ width: `${trialPct}%` }} />
+          </div>
+          <p className="text-xs text-warm-grey mt-2">${trial.daily_remaining_usd.toFixed(4)} of ${trial.daily_limit_usd.toFixed(2)} left today</p>
+        </div>
+      )}
+      {remaining > 0 && (
+        <div className={`card ${trial?.active ? "lg:col-span-2" : "lg:col-span-3"}`}>
+          <p className="text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-3">Get started ({steps.length - remaining}/{steps.length})</p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {steps.map((s) => (
+              <Link key={s.label} to={s.to}
+                className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${s.done ? "text-warm-grey" : "text-deep-charcoal dark:text-cloud-grey hover:bg-cloud-grey dark:hover:bg-deep-charcoal"}`}>
+                <CheckCircle2 size={16} className={s.done ? "text-warm-olive" : "text-muted-metal"} />
+                <span className={s.done ? "line-through" : ""}>{s.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const { user } = useAuth();
   const { data: usageData } = useQuery({
@@ -504,6 +563,9 @@ export default function UserDashboard() {
             <Link to="/dashboard/keys" className="text-xs text-warm-grey hover:text-silk-gold mt-2 inline-flex gap-1">Manage keys <ArrowRight size={12} /></Link>
           </div>
         </div>
+
+        {/* Trial status + onboarding checklist */}
+        <TrialAndOnboarding />
 
         {/* Usage chart */}
         {chartData.length > 0 && (

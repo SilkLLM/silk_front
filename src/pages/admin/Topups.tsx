@@ -1,6 +1,6 @@
 /**
  * Topups.tsx
- * Admin page — record manual provider top-ups and view top-up history.
+ * Admin page - record manual provider top-ups and view top-up history.
  */
 
 // File: silkllm-frontend/src/pages/admin/Topups.tsx
