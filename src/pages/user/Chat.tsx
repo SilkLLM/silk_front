@@ -9,18 +9,46 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X, Copy, Pencil, RefreshCw } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X, Copy, Pencil, RefreshCw,
+  Type, Image as ImageIcon, AudioLines, Video } from "lucide-react";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
-import { modelsApi, generateApi } from "@/services/api";
+import { modelsApi, generateApi, mediaApi } from "@/services/api";
 
 type Role = "user" | "assistant" | "system";
-interface Msg { role: Role; content: string; }
+// `kind` records how an assistant message was produced (text or a media modality)
+// so it can be regenerated the same way.
+interface Msg { role: Role; content: string; kind?: "text" | "image" | "audio" | "video"; }
 interface Conversation { id: string; title: string; model: string; createdAt: number; updatedAt: number; messages: Msg[]; }
 interface ChatStore { version: number; expiryDays: number; conversations: Conversation[]; }
 
 const KEY = "silk_chats";
+
+type Mode = "text" | "image" | "audio" | "video";
+const MODES: { key: Mode; label: string; icon: React.ReactNode; placeholder: string }[] = [
+  { key: "text",  label: "Text",  icon: <Type size={13} />,       placeholder: "Message SilkLLM..." },
+  { key: "image", label: "Image", icon: <ImageIcon size={13} />,  placeholder: "Describe an image to generate..." },
+  { key: "audio", label: "Audio", icon: <AudioLines size={13} />, placeholder: "Enter text to turn into speech..." },
+  { key: "video", label: "Video", icon: <Video size={13} />,      placeholder: "Describe a video to generate..." },
+];
+
+// Turn a returned image (URL or raw base64) into a markdown image the renderer
+// can display and offer a download for.
+function toImageContent(img: string): string {
+  const src = /^https?:\/\//.test(img) || img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
+  return `![image](${src})`;
+}
+
+function audioMime(fmt: string): string {
+  const map: Record<string, string> = {
+    mp3: "audio/mpeg", mpeg: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg",
+    m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac", opus: "audio/ogg",
+  };
+  const f = (fmt || "mp3").toLowerCase();
+  return map[f] || `audio/${f}`;
+}
+
 const EXPIRY_OPTIONS = [
   { label: "This session", days: 0 },
   { label: "1 day", days: 1 },
@@ -70,14 +98,33 @@ export default function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: models } = useQuery({
+  const { data: allModels } = useQuery({
     queryKey: ["chat-models"],
-    queryFn: () => modelsApi.list().then((r) => r.data.models.filter((m: any) => (m.modality || "text") === "text")),
+    queryFn: () => modelsApi.list().then((r) => r.data.models),
   });
+  const [mode, setMode] = useState<Mode>("text");
   const [model, setModel] = useState<string>("");
-  useEffect(() => { if (!model && models?.length) setModel(models[0].id); }, [models, model]);
 
-  useEffect(() => { localStorage.setItem(KEY, JSON.stringify(store)); }, [store]);
+  // Models available for the current mode (grouped by modality).
+  const modeModels = useMemo(
+    () => (allModels || []).filter((m: any) => (m.modality || "text") === mode),
+    [allModels, mode],
+  );
+  // Keep the selected model valid whenever the mode or catalogue changes.
+  useEffect(() => {
+    if (modeModels.length && !modeModels.some((m: any) => m.id === model)) {
+      setModel(modeModels[0].id);
+    }
+  }, [modeModels, model]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(store));
+    } catch {
+      // Generated media (base64 data URIs) can exceed the localStorage quota.
+      toast.error("Local storage is full. Delete some chats or generated media to keep saving.");
+    }
+  }, [store]);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [activeId, liveText, store]);
 
   const active = useMemo(() => store.conversations.find((c) => c.id === activeId) || null, [store, activeId]);
@@ -119,8 +166,44 @@ export default function Chat() {
     setStreaming(false);
   }
 
+  // Generate an image, audio clip, or video from a prompt and append it as an
+  // assistant message whose content the Markdown renderer displays inline.
+  async function runMediaGeneration(convId: string, kind: Exclude<Mode, "text">, prompt: string, modelId?: string) {
+    setStreaming(true);
+    setLiveText("");
+    const useModel = modelId || (allModels || []).find((m: any) => (m.modality || "text") === kind)?.id;
+    try {
+      let content = "";
+      if (kind === "image") {
+        const { data } = await mediaApi.image({ prompt, model: useModel });
+        const parts = (data.images || []).filter(Boolean).map(toImageContent);
+        content = parts.join("\n") || "(no image was returned)";
+      } else if (kind === "audio") {
+        const { data } = await mediaApi.audio({ prompt, model: useModel });
+        content = data.audio_b64 ? `data:${audioMime(data.format)};base64,${data.audio_b64}` : "(no audio was returned)";
+      } else {
+        const { data } = await mediaApi.video({ prompt, model: useModel });
+        content = data.video_url || "(no video was returned)";
+      }
+      updateConversation(convId, (c) => ({
+        ...c, messages: c.messages.concat({ role: "assistant", content, kind }), updatedAt: Date.now(),
+      }));
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Generation failed";
+      updateConversation(convId, (c) => ({
+        ...c, messages: c.messages.concat({ role: "assistant", content: `Error: ${detail}`, kind }), updatedAt: Date.now(),
+      }));
+    } finally {
+      setStreaming(false);
+    }
+  }
+
   async function send() {
     if (!input.trim() || streaming) return;
+    if (mode !== "text" && modeModels.length === 0) {
+      toast.error(`No ${mode} models are available right now.`);
+      return;
+    }
     let convId = activeId;
     if (!convId) {
       const c: Conversation = { id: uid(), title: input.slice(0, 40), model, createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
@@ -128,14 +211,19 @@ export default function Chat() {
       convId = c.id;
       setActiveId(convId);
     }
-    const userMsg: Msg = { role: "user", content: input.trim() };
+    const prompt = input.trim();
+    const userMsg: Msg = { role: "user", content: prompt };
     const history = (store.conversations.find((c) => c.id === convId)?.messages || []).concat(userMsg);
     updateConversation(convId!, (c) => ({
       ...c, messages: history, updatedAt: Date.now(),
-      title: c.messages.length === 0 ? input.slice(0, 40) : c.title,
+      title: c.messages.length === 0 ? prompt.slice(0, 40) : c.title,
     }));
     setInput("");
-    await runGeneration(convId!, history);
+    if (mode === "text") {
+      await runGeneration(convId!, history);
+    } else {
+      await runMediaGeneration(convId!, mode, prompt, model);
+    }
   }
 
   function copyText(text: string) {
@@ -144,14 +232,20 @@ export default function Chat() {
   }
 
   // Regenerate the assistant reply at `index`: discard it (and anything after)
-  // then re-run generation from the preceding messages.
+  // then re-run the same kind of generation from the preceding messages.
   function regenerate(index: number) {
     if (streaming || !activeId) return;
     const conv = store.conversations.find((c) => c.id === activeId);
     if (!conv) return;
+    const kind = conv.messages[index]?.kind || "text";
     const history = conv.messages.slice(0, index);
     updateConversation(activeId, (c) => ({ ...c, messages: history, updatedAt: Date.now() }));
-    runGeneration(activeId, history);
+    if (kind === "text") {
+      runGeneration(activeId, history);
+    } else {
+      const prompt = history[history.length - 1]?.content || "";
+      runMediaGeneration(activeId, kind, prompt);
+    }
   }
 
   // Edit a user message: load it back into the composer and trim the
@@ -248,9 +342,11 @@ export default function Chat() {
             <span className="md:hidden flex-1 truncate text-sm font-medium text-deep-charcoal dark:text-cloud-grey">
               {active?.title || "New chat"}
             </span>
-            <select className="input py-1.5 text-sm w-auto max-w-[150px] sm:max-w-[220px] shrink-0 md:flex-none"
-              value={model} onChange={(e) => setModel(e.target.value)}>
-              {(models || []).map((m: any) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+            <select className="input py-1.5 text-sm w-auto max-w-[150px] sm:max-w-[220px] shrink-0 md:flex-none disabled:opacity-50"
+              value={model} onChange={(e) => setModel(e.target.value)} disabled={modeModels.length === 0}>
+              {modeModels.length === 0
+                ? <option value="">No {mode} models</option>
+                : modeModels.map((m: any) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
             <button onClick={newChat} className="md:hidden text-silk-gold p-1 -m-1 shrink-0" title="New chat"><Plus size={20} /></button>
           </div>
@@ -286,31 +382,75 @@ export default function Chat() {
             )}
             {streaming && (
               <div className="flex justify-start">
-                <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey">
-                  {liveText ? <Markdown text={liveText} /> : <span className="text-warm-grey">Thinking...</span>}
+                <div className="max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-2.5 text-sm bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey">
+                  {liveText ? <Markdown text={liveText} /> : (
+                    <span className="text-warm-grey inline-flex items-center gap-2">
+                      <RefreshCw size={13} className="animate-spin" />
+                      {mode === "text" ? "Thinking..." : `Generating ${mode}...`}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
-          <div className="p-3 border-t border-muted-metal/40 flex items-end gap-2">
-            <textarea
-              ref={textareaRef}
-              className="input flex-1 resize-none max-h-32"
-              rows={1}
-              placeholder="Message SilkLLM..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            />
-            {streaming ? (
-              <button onClick={() => { stopRef.current = true; }} className="btn-secondary shrink-0" title="Stop">
-                <Square size={16} />
-              </button>
-            ) : (
-              <button onClick={send} disabled={!input.trim()} className="btn-primary shrink-0 disabled:opacity-50" title="Send">
-                <Send size={16} />
-              </button>
+          <div className="border-t border-muted-metal/40">
+            {/* Generation mode switcher */}
+            <div className="flex items-center gap-1 px-3 pt-2 overflow-x-auto">
+              {MODES.map((md) => (
+                <button
+                  key={md.key}
+                  onClick={() => setMode(md.key)}
+                  disabled={streaming}
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full whitespace-nowrap transition-colors disabled:opacity-50 ${
+                    mode === md.key
+                      ? "bg-silk-gold/15 text-silk-gold"
+                      : "text-warm-grey hover:text-silk-gold hover:bg-cloud-grey dark:hover:bg-deep-charcoal"
+                  }`}
+                >
+                  {md.icon} {md.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="px-3 pb-3 pt-2 flex items-end gap-2">
+              <textarea
+                ref={textareaRef}
+                className="input flex-1 resize-none max-h-32"
+                rows={1}
+                placeholder={MODES.find((x) => x.key === mode)?.placeholder}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+              />
+              {streaming ? (
+                mode === "text" ? (
+                  <button onClick={() => { stopRef.current = true; }} className="btn-secondary shrink-0" title="Stop">
+                    <Square size={16} />
+                  </button>
+                ) : (
+                  <button disabled className="btn-primary shrink-0 opacity-60 cursor-wait" title="Generating">
+                    <RefreshCw size={16} className="animate-spin" />
+                  </button>
+                )
+              ) : (
+                <button
+                  onClick={send}
+                  disabled={!input.trim() || (mode !== "text" && modeModels.length === 0)}
+                  className="btn-primary shrink-0 disabled:opacity-50"
+                  title="Send"
+                >
+                  <Send size={16} />
+                </button>
+              )}
+            </div>
+
+            {mode !== "text" && (
+              <p className="px-3 pb-2 text-[10px] text-muted-metal">
+                {modeModels.length === 0
+                  ? `No ${mode} models are enabled yet. An admin can enable one under Model Control.`
+                  : `Generates ${mode} from your prompt. Results are kept only in this browser.`}
+              </p>
             )}
           </div>
         </div>
