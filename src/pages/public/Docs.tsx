@@ -160,6 +160,79 @@ const audio = await client.generateAudio({
   output_format: "mp3_44100_128",
 });
 console.log(audio.voice, audio.format, audio.audio_b64.length);`,
+
+  pySetup: `pip install silkllm
+
+from silkllm import Client
+client = Client(api_key="silk_your_key")  # or set SILKLLM_API_KEY
+# For local testing: Client(api_key="silk_...", base_url="http://localhost:8000")`,
+
+  jsSetup: `npm install silkllm
+
+import SilkLLM from "silkllm";
+const client = new SilkLLM({ apiKey: "silk_your_key" }); // or SILKLLM_API_KEY
+// For local testing: new SilkLLM({ apiKey: "silk_...", baseUrl: "http://localhost:8000" })`,
+
+  pyVision: `from silkllm import text_part, image_part
+
+# Ask a vision model about an image (URL or base64 data URI)
+resp = client.generate(
+    model="gpt-4o",
+    messages=[{
+        "role": "user",
+        "content": [
+            text_part("What is in this image?"),
+            image_part("https://example.com/photo.jpg"),
+        ],
+    }],
+)
+print(resp.content)`,
+
+  jsVision: `import { textPart, imagePart } from "silkllm";
+
+// Ask a vision model about an image (URL or base64 data URI)
+const resp = await client.generate({
+  model: "gpt-4o",
+  messages: [{
+    role: "user",
+    content: [
+      textPart("What is in this image?"),
+      imagePart("https://example.com/photo.jpg"),
+    ],
+  }],
+});
+console.log(resp.content);`,
+
+  pyErrors: `from silkllm import (
+    InsufficientBalanceError, RateLimitError, ModelNotFoundError, ProviderError,
+)
+
+try:
+    resp = client.generate(messages=[{"role": "user", "content": "Hi"}])
+except InsufficientBalanceError:
+    print("Out of credit - add funds to continue (free models are free only during your trial).")
+except RateLimitError:
+    print("Slow down and retry shortly.")
+except ModelNotFoundError:
+    print("That model is not enabled.")
+except ProviderError as e:
+    print("All providers failed:", e)`,
+
+  jsErrors: `import { InsufficientBalanceError, RateLimitError, ModelNotFoundError, ProviderError } from "silkllm";
+
+try {
+  const resp = await client.generate({ messages: [{ role: "user", content: "Hi" }] });
+} catch (e) {
+  if (e instanceof InsufficientBalanceError) {
+    console.log("Out of credit - add funds (free models are free only during your trial).");
+  } else if (e instanceof RateLimitError) {
+    console.log("Slow down and retry shortly.");
+  } else if (e instanceof ModelNotFoundError) {
+    console.log("That model is not enabled.");
+  } else if (e instanceof ProviderError) {
+    console.log("All providers failed:", e.message);
+  }
+}`,
 };
 
 // ── Lightweight syntax colorizer ─────────────────────────────────────────────
@@ -418,6 +491,35 @@ const SECTIONS = [
         <LangTabs python={CODE.pyBasic} javascript={CODE.jsBasic} />
         <H3>Streaming</H3>
         <LangTabs python={CODE.pyStream} javascript={CODE.jsStream} />
+      </>
+    ),
+  },
+  {
+    id: "examples", label: "Examples", icon: <Layers size={14} />,
+    body: (
+      <>
+        <Para>A tour of the SDKs across every feature, in Python and JavaScript. Each block is copy-ready; swap in your own key and model.</Para>
+        <H3>Install and connect</H3>
+        <LangTabs python={CODE.pySetup} javascript={CODE.jsSetup} />
+        <H3>Generate and stream</H3>
+        <LangTabs python={CODE.pyBasic} javascript={CODE.jsBasic} />
+        <LangTabs python={CODE.pyStream} javascript={CODE.jsStream} />
+        <H3>Vision: ask about an image</H3>
+        <Para>Pass a list of content parts (text plus one or more images) to any vision-capable model. Images can be public URLs or base64 data URIs.</Para>
+        <LangTabs python={CODE.pyVision} javascript={CODE.jsVision} />
+        <H3>Images, audio, and video</H3>
+        <LangTabs python={CODE.pyMedia} javascript={CODE.jsMedia} />
+        <H3>Expressive speech with a chosen speaker</H3>
+        <LangTabs python={CODE.pyVoice} javascript={CODE.jsVoice} />
+        <H3>BYOK: deposit and earn</H3>
+        <LangTabs python={CODE.pyByok} javascript={CODE.jsByok} />
+        <H3>Free trial status</H3>
+        <LangTabs python={CODE.pyTrial} javascript={CODE.jsTrial} />
+        <H3>List models by modality</H3>
+        <LangTabs python={CODE.pyModels} javascript={CODE.jsModels} />
+        <H3>Handle errors</H3>
+        <Para>Free models are free only during your trial; once you are paying from balance a request needs credit, so handle <code className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: "#1A1C1D", color: "#D29A2D" }}>InsufficientBalanceError</code> and prompt the user to top up.</Para>
+        <LangTabs python={CODE.pyErrors} javascript={CODE.jsErrors} />
       </>
     ),
   },
