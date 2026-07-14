@@ -1000,8 +1000,9 @@ function DevExperience() {
   return (
     <section className="py-28 px-6" style={{ background: "#0A0A0A" }}>
       <div className="max-w-5xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-16 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-start">
           <motion.div
+            className="min-w-0"
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -1082,6 +1083,7 @@ function DevExperience() {
           </motion.div>
 
           <motion.div
+            className="min-w-0"
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}

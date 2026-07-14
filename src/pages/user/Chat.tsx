@@ -9,7 +9,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
 import { modelsApi, generateApi } from "@/services/api";
@@ -48,6 +48,7 @@ function uid() { return Math.random().toString(36).slice(2) + Date.now().toStrin
 export default function Chat() {
   const [store, setStore] = useState<ChatStore>(() => purge(loadStore()));
   const [activeId, setActiveId] = useState<string | null>(store.conversations[0]?.id || null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [liveText, setLiveText] = useState("");
@@ -116,52 +117,89 @@ export default function Chat() {
     setStreaming(false);
   }
 
+  // Shared conversation list, used in both the desktop sidebar and the mobile drawer.
+  // onPick is called after selecting/creating a chat so the mobile drawer can close.
+  const conversationList = (onPick: () => void) => (
+    <>
+      <button onClick={() => { newChat(); onPick(); }} className="btn-primary w-full flex items-center justify-center gap-2 text-sm">
+        <Plus size={16} /> New chat
+      </button>
+      <div className="flex-1 overflow-y-auto mt-3 space-y-1">
+        {store.conversations.length === 0 && <p className="text-xs text-warm-grey px-2">No chats yet.</p>}
+        {store.conversations.map((c) => (
+          <div key={c.id}
+            className={`group flex items-center gap-2 px-2.5 py-2.5 rounded-lg cursor-pointer text-sm ${
+              c.id === activeId ? "bg-silk-gold/10 text-silk-gold" : "text-warm-grey hover:bg-cloud-grey dark:hover:bg-deep-charcoal"
+            }`}
+            onClick={() => { setActiveId(c.id); onPick(); }}
+          >
+            <MessageSquare size={14} className="shrink-0" />
+            <span className="flex-1 truncate">{c.title}</span>
+            <button onClick={(e) => { e.stopPropagation(); deleteChat(c.id); }}
+              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-warm-grey hover:text-red-400 p-1 -m-1">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 pt-3 border-t border-muted-metal/40">
+        <label className="text-[11px] text-warm-grey flex items-center gap-1 mb-1">
+          <ShieldCheck size={12} className="text-silk-gold" /> Keep chats for
+        </label>
+        <select className="input text-xs py-1.5" value={store.expiryDays}
+          onChange={(e) => setStore((s) => ({ ...s, expiryDays: parseInt(e.target.value) }))}>
+          {EXPIRY_OPTIONS.map((o) => <option key={o.days} value={o.days}>{o.label}</option>)}
+        </select>
+        <p className="text-[10px] text-muted-metal mt-1.5">Stored only in this browser. We never keep your chats.</p>
+      </div>
+    </>
+  );
+
   return (
     <DashboardLayout>
       <div className="flex gap-4 h-[calc(100vh-8rem)]">
-        {/* Conversation list */}
+        {/* Conversation list (desktop) */}
         <div className="hidden md:flex w-64 flex-col card p-3 shrink-0">
-          <button onClick={newChat} className="btn-primary w-full flex items-center justify-center gap-2 text-sm">
-            <Plus size={16} /> New chat
-          </button>
-          <div className="flex-1 overflow-y-auto mt-3 space-y-1">
-            {store.conversations.length === 0 && <p className="text-xs text-warm-grey px-2">No chats yet.</p>}
-            {store.conversations.map((c) => (
-              <div key={c.id}
-                className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer text-sm ${
-                  c.id === activeId ? "bg-silk-gold/10 text-silk-gold" : "text-warm-grey hover:bg-cloud-grey dark:hover:bg-deep-charcoal"
-                }`}
-                onClick={() => setActiveId(c.id)}
-              >
-                <MessageSquare size={14} className="shrink-0" />
-                <span className="flex-1 truncate">{c.title}</span>
-                <button onClick={(e) => { e.stopPropagation(); deleteChat(c.id); }}
-                  className="opacity-0 group-hover:opacity-100 text-warm-grey hover:text-red-400">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 pt-3 border-t border-muted-metal/40">
-            <label className="text-[11px] text-warm-grey flex items-center gap-1 mb-1">
-              <ShieldCheck size={12} className="text-silk-gold" /> Keep chats for
-            </label>
-            <select className="input text-xs py-1.5" value={store.expiryDays}
-              onChange={(e) => setStore((s) => ({ ...s, expiryDays: parseInt(e.target.value) }))}>
-              {EXPIRY_OPTIONS.map((o) => <option key={o.days} value={o.days}>{o.label}</option>)}
-            </select>
-            <p className="text-[10px] text-muted-metal mt-1.5">Stored only in this browser. We never keep your chats.</p>
-          </div>
+          {conversationList(() => {})}
         </div>
 
+        {/* Conversation list (mobile drawer) */}
+        {drawerOpen && (
+          <div className="md:hidden fixed inset-0 z-[60]">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white dark:bg-slate-dark border-r border-muted-metal/40 p-3 flex flex-col shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold text-deep-charcoal dark:text-cloud-grey">Your chats</span>
+                <button onClick={() => setDrawerOpen(false)} className="text-warm-grey hover:text-silk-gold p-1 -m-1">
+                  <X size={18} />
+                </button>
+              </div>
+              {conversationList(() => setDrawerOpen(false))}
+            </div>
+          </div>
+        )}
+
         {/* Chat pane */}
-        <div className="flex-1 flex flex-col card p-0 overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-muted-metal/40">
-            <MessageSquare size={16} className="text-silk-gold" />
-            <select className="input py-1.5 text-sm max-w-[220px]" value={model} onChange={(e) => setModel(e.target.value)}>
+        <div className="flex-1 min-w-0 flex flex-col card p-0 overflow-hidden">
+          <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-muted-metal/40">
+            <button onClick={() => setDrawerOpen(true)}
+              className="md:hidden relative text-warm-grey hover:text-silk-gold p-1 -m-1 shrink-0" title="Your chats">
+              <PanelLeft size={20} />
+              {store.conversations.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-silk-gold text-white text-[9px] font-semibold rounded-full min-w-[15px] h-[15px] px-0.5 flex items-center justify-center">
+                  {store.conversations.length}
+                </span>
+              )}
+            </button>
+            <MessageSquare size={16} className="text-silk-gold hidden md:block shrink-0" />
+            <span className="md:hidden flex-1 truncate text-sm font-medium text-deep-charcoal dark:text-cloud-grey">
+              {active?.title || "New chat"}
+            </span>
+            <select className="input py-1.5 text-sm w-auto max-w-[150px] sm:max-w-[220px] shrink-0 md:flex-none"
+              value={model} onChange={(e) => setModel(e.target.value)}>
               {(models || []).map((m: any) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
-            <button onClick={newChat} className="md:hidden ml-auto text-silk-gold"><Plus size={18} /></button>
+            <button onClick={newChat} className="md:hidden text-silk-gold p-1 -m-1 shrink-0" title="New chat"><Plus size={20} /></button>
           </div>
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
