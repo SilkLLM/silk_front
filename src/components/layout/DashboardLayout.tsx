@@ -12,11 +12,11 @@ import { NavLink, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
-import { notificationsApi } from "@/services/api";
+import { notificationsApi, trialApi } from "@/services/api";
 import {
   LayoutDashboard, Key, CreditCard, BarChart2, MessageSquare, Coins,
   Settings, Bell, Users, Zap, PlusCircle, LogOut, Menu, Store,
-  SlidersHorizontal, ShieldCheck, Sun, Moon,
+  SlidersHorizontal, ShieldCheck, Sun, Moon, Gift,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -55,6 +55,23 @@ function NavList({ items }: { items: NavItem[] }) {
         </NavLink>
       ))}
     </>
+  );
+}
+
+function TrialPill() {
+  const { data: trial } = useQuery({
+    queryKey: ["trial-status"],
+    queryFn: () => trialApi.status().then((r) => r.data),
+  });
+  if (!trial?.active) return null;
+  return (
+    <NavLink to="/dashboard"
+      className="flex items-center gap-2 mx-1 mb-2 px-3 py-2 rounded-lg text-xs font-medium"
+      style={{ background: "rgba(210,154,45,0.12)", border: "1px solid rgba(210,154,45,0.3)", color: "#D29A2D" }}>
+      <Gift size={14} />
+      <span>Free trial</span>
+      <span className="ml-auto text-warm-grey">{trial.days_remaining}d left</span>
+    </NavLink>
   );
 }
 
@@ -122,6 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       <div className="px-4 py-4 border-t border-muted-metal">
+        <TrialPill />
         <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
           <div className="w-8 h-8 rounded-full bg-silk-gold flex items-center justify-center text-white text-sm font-bold">
             {user?.name?.[0]?.toUpperCase() || "U"}

@@ -692,7 +692,7 @@ function StatsRow() {
   return (
     <section className="py-16 px-6" style={{ background: "#0A0A0A", borderTop: "1px solid #111314" }}>
       <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-8">
-        <AnimatedStat value="5+"   label="Providers"          delay={0} />
+        <AnimatedStat value="99.9" label="Uptime (%)"         delay={0} />
         <AnimatedStat value="50+"  label="Models"             delay={0.1} />
         <AnimatedStat value="4"    label="Modalities"         delay={0.2} />
         <AnimatedStat value="75%"  label="Earn on your keys"  delay={0.3} />
@@ -826,15 +826,40 @@ function Providers() {
               letterSpacing: "-0.03em",
             }}
           >
-            Five networks.
+            Every network.
             <br />
             <span style={{ color: "#D29A2D" }}>One key.</span>
           </h2>
+          <p className="text-base leading-relaxed mt-5 max-w-xl" style={{ color: "#595F61" }}>
+            We start with the majors and add more continuously. Your one key keeps working as the catalogue grows.
+          </p>
         </motion.div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {PROVIDERS.map((p, i) => (
             <ProviderCard key={p.name} {...p} index={i} />
           ))}
+          {/* Growth card: signals we go beyond the current set */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.7, delay: PROVIDERS.length * 0.09, ease: [0.16, 1, 0.3, 1] }}
+            className="relative rounded-2xl px-6 py-5 flex flex-col justify-center items-start overflow-hidden"
+            style={{ background: "#0F1011", border: "1px dashed #2A2C2E" }}
+          >
+            <motion.div
+              className="absolute inset-0 pointer-events-none"
+              animate={{ opacity: [0.15, 0.4, 0.15] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              style={{ background: "radial-gradient(circle at 30% 30%, rgba(210,154,45,0.14), transparent 70%)" }}
+            />
+            <div className="relative font-display font-semibold text-base" style={{ color: "#D29A2D" }}>
+              and more
+            </div>
+            <div className="relative text-xs font-mono mt-1" style={{ color: "#595F61" }}>
+              added continuously
+            </div>
+          </motion.div>
         </div>
       </div>
     </section>
@@ -1105,7 +1130,7 @@ function CTA() {
             <span style={{ color: "#D29A2D" }}>faster?</span>
           </h2>
           <p className="text-lg mb-12" style={{ color: "#595F61" }}>
-            One API key. Five providers. Start free, scale as you grow.
+            One API key. Every model. Start free, scale as you grow.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link to="/login">
@@ -1261,6 +1286,7 @@ function EarnLoop() {
               initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-40px" }}
               transition={{ duration: 0.6, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
+              whileHover={{ y: -5 }}
               className="relative rounded-2xl px-5 py-6"
               style={{ background: "#0F1011", border: "1px solid #1E2022" }}
             >
@@ -1418,9 +1444,11 @@ export default function Landing() {
       <Modalities />
       <HowItWorks />
       <Providers />
+      <SilkThread />
       <OwnData />
       <Pricing />
       <DevExperience />
+      <SilkThread height={90} />
       <CTA />
       <Footer />
     </div>
