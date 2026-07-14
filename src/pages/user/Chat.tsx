@@ -9,7 +9,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X, Copy, Pencil, RefreshCw } from "lucide-react";
+import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
 import { modelsApi, generateApi } from "@/services/api";
@@ -45,6 +46,19 @@ function purge(store: ChatStore): ChatStore {
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
+function ActionBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="p-1.5 rounded-md text-warm-grey hover:text-silk-gold hover:bg-cloud-grey dark:hover:bg-deep-charcoal transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function Chat() {
   const [store, setStore] = useState<ChatStore>(() => purge(loadStore()));
   const [activeId, setActiveId] = useState<string | null>(store.conversations[0]?.id || null);
@@ -54,6 +68,7 @@ export default function Chat() {
   const [liveText, setLiveText] = useState("");
   const stopRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: models } = useQuery({
     queryKey: ["chat-models"],
@@ -82,6 +97,28 @@ export default function Chat() {
     setStore((s) => ({ ...s, conversations: s.conversations.map((c) => (c.id === id ? updater(c) : c)) }));
   }
 
+  // Stream a completion for the given history and append the assistant reply to
+  // the conversation. The conversation's messages must already equal `history`.
+  async function runGeneration(convId: string, history: Msg[]) {
+    setStreaming(true);
+    setLiveText("");
+    stopRef.current = false;
+
+    let acc = "";
+    await generateApi.streamGenerate(
+      { messages: history.map((m) => ({ role: m.role, content: m.content })), model, stream: true },
+      (chunk) => { if (!stopRef.current) { acc += chunk; setLiveText(acc); } },
+      (err) => { acc = acc || `Error: ${err}`; },
+      () => {},
+    );
+
+    updateConversation(convId, (c) => ({
+      ...c, messages: c.messages.concat({ role: "assistant", content: acc || "(no response)" }), updatedAt: Date.now(),
+    }));
+    setLiveText("");
+    setStreaming(false);
+  }
+
   async function send() {
     if (!input.trim() || streaming) return;
     let convId = activeId;
@@ -98,23 +135,39 @@ export default function Chat() {
       title: c.messages.length === 0 ? input.slice(0, 40) : c.title,
     }));
     setInput("");
-    setStreaming(true);
-    setLiveText("");
-    stopRef.current = false;
+    await runGeneration(convId!, history);
+  }
 
-    let acc = "";
-    await generateApi.streamGenerate(
-      { messages: history.map((m) => ({ role: m.role, content: m.content })), model, stream: true },
-      (chunk) => { if (!stopRef.current) { acc += chunk; setLiveText(acc); } },
-      (err) => { acc = acc || `Error: ${err}`; },
-      () => {},
-    );
+  function copyText(text: string) {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied");
+  }
 
-    updateConversation(convId!, (c) => ({
-      ...c, messages: c.messages.concat({ role: "assistant", content: acc || "(no response)" }), updatedAt: Date.now(),
-    }));
-    setLiveText("");
-    setStreaming(false);
+  // Regenerate the assistant reply at `index`: discard it (and anything after)
+  // then re-run generation from the preceding messages.
+  function regenerate(index: number) {
+    if (streaming || !activeId) return;
+    const conv = store.conversations.find((c) => c.id === activeId);
+    if (!conv) return;
+    const history = conv.messages.slice(0, index);
+    updateConversation(activeId, (c) => ({ ...c, messages: history, updatedAt: Date.now() }));
+    runGeneration(activeId, history);
+  }
+
+  // Edit a user message: load it back into the composer and trim the
+  // conversation to before it, so sending produces a fresh exchange.
+  function editMessage(index: number) {
+    if (streaming || !activeId) return;
+    const conv = store.conversations.find((c) => c.id === activeId);
+    if (!conv) return;
+    setInput(conv.messages[index].content);
+    updateConversation(activeId, (c) => ({ ...c, messages: c.messages.slice(0, index), updatedAt: Date.now() }));
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  function deleteMessage(index: number) {
+    if (streaming || !activeId) return;
+    updateConversation(activeId, (c) => ({ ...c, messages: c.messages.filter((_, i) => i !== index), updatedAt: Date.now() }));
   }
 
   // Shared conversation list, used in both the desktop sidebar and the mobile drawer.
@@ -210,11 +263,23 @@ export default function Chat() {
               </div>
             ) : (
               active.messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                    m.role === "user" ? "bg-silk-gold text-white whitespace-pre-wrap" : "bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey"
+                <div key={i} className={`group flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
+                  <div className={`max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
+                    m.role === "user" ? "bg-silk-gold text-white whitespace-pre-wrap break-words" : "bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey"
                   }`}>
                     {m.role === "user" ? m.content : <Markdown text={m.content} />}
+                  </div>
+                  {/* Per-message actions: always visible on touch, hover-revealed on desktop */}
+                  <div className={`flex items-center gap-0.5 mt-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity ${
+                    m.role === "user" ? "flex-row-reverse" : ""
+                  }`}>
+                    <ActionBtn onClick={() => copyText(m.content)} title="Copy"><Copy size={14} /></ActionBtn>
+                    {m.role === "user" ? (
+                      <ActionBtn onClick={() => editMessage(i)} title="Edit"><Pencil size={14} /></ActionBtn>
+                    ) : (
+                      <ActionBtn onClick={() => regenerate(i)} title="Regenerate"><RefreshCw size={14} /></ActionBtn>
+                    )}
+                    <ActionBtn onClick={() => deleteMessage(i)} title="Delete"><Trash2 size={14} /></ActionBtn>
                   </div>
                 </div>
               ))
@@ -230,6 +295,7 @@ export default function Chat() {
 
           <div className="p-3 border-t border-muted-metal/40 flex items-end gap-2">
             <textarea
+              ref={textareaRef}
               className="input flex-1 resize-none max-h-32"
               rows={1}
               placeholder="Message SilkLLM..."
