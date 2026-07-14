@@ -233,6 +233,35 @@ try {
     console.log("All providers failed:", e.message);
   }
 }`,
+
+  pySts: `# Voice cloning: create a speaker from your own samples
+clone = client.clone_voice(name="My voice", samples=["sample1.mp3", "sample2.mp3"])
+print("cloned voice_id:", clone["voice_id"])
+
+# Speech-to-speech: convert a clip into that voice (or any speaker)
+result = client.speech_to_speech(
+    audio="recording.mp3",          # file path or bytes
+    voice=clone["voice_id"],
+    seconds=12,                      # approx duration, for pricing
+)
+print(result.format, len(result.audio_b64))`,
+
+  jsSts: `import { readFileSync } from "node:fs";
+
+// Voice cloning: create a speaker from your own samples
+const clone = await client.cloneVoice({
+  name: "My voice",
+  samples: [readFileSync("sample1.mp3"), readFileSync("sample2.mp3")],
+});
+console.log("cloned voice_id:", clone.voice_id);
+
+// Speech-to-speech: convert a clip into that voice (or any speaker)
+const result = await client.speechToSpeech({
+  audio: readFileSync("recording.mp3"),
+  voice: clone.voice_id,
+  seconds: 12,
+});
+console.log(result.format, result.audio_b64.length);`,
 };
 
 // ── Lightweight syntax colorizer ─────────────────────────────────────────────
@@ -461,12 +490,17 @@ const SECTIONS = [
             ["POST", "/api/generate/audio", "Text to speech (base64 audio)"],
             ["POST", "/api/generate/video", "Video generation, where supported"],
             ["GET", "/api/generate/audio/voices", "List ElevenLabs speakers"],
+            ["POST", "/api/generate/audio/speech-to-speech", "Voice conversion (audio in, voice out)"],
+            ["POST", "/api/generate/audio/clone-voice", "Clone a voice from samples"],
           ]}
         />
         <H3>Voices and speakers (ElevenLabs)</H3>
         <Para>For expressive speech, pick an ElevenLabs model and a speaker, and shape delivery with voice settings (stability, similarity, style, speaker boost). List the speakers on your account, then pass a <code className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: "#1A1C1D", color: "#D29A2D" }}>voice</code> id. OpenAI TTS uses fixed voice names (alloy, echo, fable, onyx, nova, shimmer) instead.</Para>
         <LangTabs python={CODE.pyVoice} javascript={CODE.jsVoice} />
-        <Callout>Add your ElevenLabs API key under Admin, Providers. Its voice models then serve just like any other model, priced per character.</Callout>
+        <H3>Voice cloning and speech-to-speech</H3>
+        <Para>Clone a speaker from your own audio samples, then use it for text-to-speech or to convert an existing clip into that voice (speech-to-speech). Conversion is priced per second of source audio.</Para>
+        <LangTabs python={CODE.pySts} javascript={CODE.jsSts} />
+        <Callout>Add your ElevenLabs API key under Admin, Providers. Its voice models then serve just like any other model, priced per character (per second for conversion).</Callout>
       </>
     ),
   },
@@ -511,6 +545,8 @@ const SECTIONS = [
         <LangTabs python={CODE.pyMedia} javascript={CODE.jsMedia} />
         <H3>Expressive speech with a chosen speaker</H3>
         <LangTabs python={CODE.pyVoice} javascript={CODE.jsVoice} />
+        <H3>Clone a voice and convert speech</H3>
+        <LangTabs python={CODE.pySts} javascript={CODE.jsSts} />
         <H3>BYOK: deposit and earn</H3>
         <LangTabs python={CODE.pyByok} javascript={CODE.jsByok} />
         <H3>Free trial status</H3>

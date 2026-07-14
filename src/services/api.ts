@@ -235,6 +235,11 @@ export const mediaApi = {
     api.post("/generate/video", data),
   // Speakers for a voice provider (ElevenLabs). Used to render a speaker picker.
   voices: (provider = "elevenlabs") => api.get("/generate/audio/voices", { params: { provider } }),
+  // Voice conversion (speech-to-speech) and instant voice cloning (multipart).
+  speechToSpeech: (form: FormData) =>
+    api.post("/generate/audio/speech-to-speech", form, { headers: { "Content-Type": undefined }, timeout: 180000 }),
+  cloneVoice: (form: FormData) =>
+    api.post("/generate/audio/clone-voice", form, { headers: { "Content-Type": undefined }, timeout: 180000 }),
 };
 
 // Admin APIs (full CRUD)

@@ -8,9 +8,9 @@
 // File: silkllm-frontend/src/pages/user/Chat.tsx
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X, Copy, Pencil, RefreshCw,
-  Type, Image as ImageIcon, AudioLines, Video, Sliders, Paperclip } from "lucide-react";
+  Type, Image as ImageIcon, AudioLines, Video, Sliders, Paperclip, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
@@ -123,6 +123,7 @@ function ActionBtn({ onClick, title, children }: { onClick: () => void; title: s
 }
 
 export default function Chat() {
+  const qc = useQueryClient();
   const [store, setStore] = useState<ChatStore>(() => purge(loadStore()));
   const [activeId, setActiveId] = useState<string | null>(store.conversations[0]?.id || null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -133,8 +134,16 @@ export default function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const audioFileRef = useRef<HTMLInputElement>(null);
   // Pending image attachments (data URIs) for the next vision message.
   const [attachments, setAttachments] = useState<{ url: string; name: string }[]>([]);
+  // Source clip for voice conversion (speech-to-speech), audio mode.
+  const [sourceAudio, setSourceAudio] = useState<{ name: string; file: File } | null>(null);
+  // Voice cloning dialog.
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneSamples, setCloneSamples] = useState<File[]>([]);
+  const [cloning, setCloning] = useState(false);
 
   const { data: allModels } = useQuery({
     queryKey: ["chat-models"],
@@ -143,9 +152,15 @@ export default function Chat() {
   const [mode, setMode] = useState<Mode>("text");
   const [model, setModel] = useState<string>("");
 
-  // Models available for the current mode (grouped by modality).
+  // Models available for the current mode (grouped by modality). Speech-to-speech
+  // models are hidden from the audio text-to-speech picker; conversion is chosen
+  // via the "convert audio" action instead.
   const modeModels = useMemo(
-    () => (allModels || []).filter((m: any) => (m.modality || "text") === mode),
+    () => (allModels || []).filter((m: any) => {
+      if ((m.modality || "text") !== mode) return false;
+      if (mode === "audio" && /_sts|sts_/.test(m.id)) return false;
+      return true;
+    }),
     [allModels, mode],
   );
   // Keep the selected model valid whenever the mode or catalogue changes.
@@ -219,8 +234,9 @@ export default function Chat() {
   const budgetMB = ((STORAGE_BUDGET * 2) / 1048576).toFixed(1);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [activeId, liveText, store]);
 
-  // Image attachments only apply to text (vision) chat.
+  // Image attachments only apply to text (vision) chat; source audio to audio.
   useEffect(() => { if (mode !== "text") setAttachments([]); }, [mode]);
+  useEffect(() => { if (mode !== "audio") setSourceAudio(null); }, [mode]);
 
   const active = useMemo(() => store.conversations.find((c) => c.id === activeId) || null, [store, activeId]);
 
@@ -299,6 +315,55 @@ export default function Chat() {
     }
   }
 
+  // Speech-to-speech: convert a source clip into the selected target speaker.
+  async function runVoiceConversion(convId: string, file: File, targetVoice: string) {
+    setStreaming(true);
+    setLiveText("");
+    try {
+      const form = new FormData();
+      form.append("audio", file);
+      form.append("voice", targetVoice);
+      form.append("seconds", "10");
+      if (showVoiceSettings) {
+        form.append("stability", String(voiceSettings.stability));
+        form.append("similarity_boost", String(voiceSettings.similarity_boost));
+        form.append("style", String(voiceSettings.style));
+        form.append("use_speaker_boost", String(voiceSettings.use_speaker_boost));
+      }
+      const { data } = await mediaApi.speechToSpeech(form);
+      const content = data.audio_b64 ? `data:${audioMime(data.format)};base64,${data.audio_b64}` : "(no audio was returned)";
+      updateConversation(convId, (c) => ({
+        ...c, messages: c.messages.concat({ role: "assistant", content, kind: "audio" }), updatedAt: Date.now(),
+      }));
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Voice conversion failed";
+      updateConversation(convId, (c) => ({
+        ...c, messages: c.messages.concat({ role: "assistant", content: `Error: ${detail}`, kind: "audio" }), updatedAt: Date.now(),
+      }));
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  async function doCloneVoice() {
+    if (!cloneName.trim() || cloneSamples.length === 0) { toast.error("Give the voice a name and at least one sample."); return; }
+    setCloning(true);
+    try {
+      const form = new FormData();
+      form.append("name", cloneName.trim());
+      cloneSamples.forEach((f) => form.append("files", f));
+      const { data } = await mediaApi.cloneVoice(form);
+      toast.success(`Voice "${cloneName.trim()}" cloned.`);
+      setCloneOpen(false); setCloneName(""); setCloneSamples([]);
+      await qc.invalidateQueries({ queryKey: ["el-voices"] });
+      if (data.voice_id) setVoice(data.voice_id);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Cloning failed");
+    } finally {
+      setCloning(false);
+    }
+  }
+
   function readFileAsDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const r = new FileReader();
@@ -320,6 +385,22 @@ export default function Chat() {
   }
 
   async function send() {
+    // Speech-to-speech: an uploaded source clip takes over audio mode.
+    if (mode === "audio" && sourceAudio && !streaming) {
+      let cid = activeId;
+      if (!cid) {
+        const c: Conversation = { id: uid(), title: "Voice change", model, createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+        setStore((s) => ({ ...s, conversations: [c, ...s.conversations] }));
+        cid = c.id; setActiveId(cid);
+      }
+      const label = `Voice change: ${sourceAudio.name}`;
+      const history = (store.conversations.find((c) => c.id === cid)?.messages || []).concat({ role: "user", content: label });
+      updateConversation(cid!, (c) => ({ ...c, messages: history, updatedAt: Date.now(), title: c.messages.length === 0 ? label.slice(0, 40) : c.title }));
+      const file = sourceAudio.file;
+      setSourceAudio(null);
+      await runVoiceConversion(cid!, file, voice);
+      return;
+    }
     if ((!input.trim() && attachments.length === 0) || streaming) return;
     if (mode !== "text" && modeModels.length === 0) {
       toast.error(`No ${mode} models are available right now.`);
@@ -602,7 +683,29 @@ export default function Chat() {
                   {isElevenlabs && !elVoices && (
                     <span className="text-[10px] text-muted-metal">Loading speakers...</span>
                   )}
+                  {isElevenlabs && (
+                    <>
+                      <span className="text-muted-metal">|</span>
+                      <button onClick={() => audioFileRef.current?.click()}
+                        className="text-[11px] text-silk-gold hover:underline inline-flex items-center gap-1" title="Convert an audio clip into this speaker's voice">
+                        <AudioLines size={12} /> Convert audio
+                      </button>
+                      <button onClick={() => setCloneOpen(true)}
+                        className="text-[11px] text-silk-gold hover:underline inline-flex items-center gap-1" title="Clone a new voice from samples">
+                        <Sparkles size={12} /> Clone voice
+                      </button>
+                    </>
+                  )}
+                  <input ref={audioFileRef} type="file" accept="audio/*,video/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setSourceAudio({ name: f.name, file: f }); e.target.value = ""; }} />
                 </div>
+                {sourceAudio && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-warm-grey bg-cloud-grey dark:bg-deep-charcoal rounded-lg px-3 py-2">
+                    <AudioLines size={14} className="text-silk-gold shrink-0" />
+                    <span className="flex-1 truncate">Convert <span className="font-medium">{sourceAudio.name}</span> to the selected speaker. Press send.</span>
+                    <button onClick={() => setSourceAudio(null)} className="text-warm-grey hover:text-red-400" title="Remove"><X size={14} /></button>
+                  </div>
+                )}
                 {isElevenlabs && showVoiceSettings && (
                   <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-cloud-grey dark:bg-deep-charcoal">
                     <SliderRow label="Stability" value={voiceSettings.stability}
@@ -671,7 +774,7 @@ export default function Chat() {
               ) : (
                 <button
                   onClick={send}
-                  disabled={(!input.trim() && attachments.length === 0) || (mode !== "text" && modeModels.length === 0)}
+                  disabled={(!input.trim() && attachments.length === 0 && !(mode === "audio" && sourceAudio)) || (mode !== "text" && modeModels.length === 0)}
                   className="btn-primary shrink-0 disabled:opacity-50"
                   title="Send"
                 >
@@ -690,6 +793,38 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {/* Voice cloning dialog */}
+      {cloneOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !cloning && setCloneOpen(false)} />
+          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-dark border border-silk-gold/30 shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-deep-charcoal dark:text-cloud-grey flex items-center gap-2">
+                <Sparkles size={18} className="text-silk-gold" /> Clone a voice
+              </h2>
+              <button onClick={() => !cloning && setCloneOpen(false)} className="text-warm-grey hover:text-silk-gold"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-warm-grey mb-4">Upload one or more clean audio samples (a minute of clear speech works well). The new voice becomes available as a speaker.</p>
+            <label className="text-xs text-warm-grey">Voice name</label>
+            <input value={cloneName} onChange={(e) => setCloneName(e.target.value)} placeholder="e.g. My voice"
+              className="input mt-1 mb-3" />
+            <label className="text-xs text-warm-grey">Samples</label>
+            <input type="file" accept="audio/*" multiple className="input mt-1 text-xs"
+              onChange={(e) => setCloneSamples(Array.from(e.target.files || []))} />
+            {cloneSamples.length > 0 && (
+              <p className="text-[11px] text-warm-grey mt-1">{cloneSamples.length} sample{cloneSamples.length > 1 ? "s" : ""} selected</p>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setCloneOpen(false)} disabled={cloning} className="btn-secondary flex-1 text-sm">Cancel</button>
+              <button onClick={doCloneVoice} disabled={cloning || !cloneName.trim() || cloneSamples.length === 0}
+                className="btn-primary flex-1 text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                {cloning ? <><RefreshCw size={14} className="animate-spin" /> Cloning...</> : <><Sparkles size={14} /> Clone</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
