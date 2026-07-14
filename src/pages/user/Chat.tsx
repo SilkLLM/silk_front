@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X, Copy, Pencil, RefreshCw,
-  Type, Image as ImageIcon, AudioLines, Video } from "lucide-react";
+  Type, Image as ImageIcon, AudioLines, Video, Sliders } from "lucide-react";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
@@ -24,6 +24,9 @@ interface Conversation { id: string; title: string; model: string; createdAt: nu
 interface ChatStore { version: number; expiryDays: number; conversations: Conversation[]; }
 
 const KEY = "silk_chats";
+// Approx localStorage budget in UTF-16 code units (~5 MB quota, 2 bytes each).
+// Used to show a usage bar and warn before the browser refuses to save.
+const STORAGE_BUDGET = 2_500_000;
 
 type Mode = "text" | "image" | "audio" | "video";
 const MODES: { key: Mode; label: string; icon: React.ReactNode; placeholder: string }[] = [
@@ -39,6 +42,12 @@ function toImageContent(img: string): string {
   const src = /^https?:\/\//.test(img) || img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
   return `![image](${src})`;
 }
+
+// OpenAI's fixed voice set (ElevenLabs speakers are fetched from the API).
+const OPENAI_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
+
+interface VoiceSettings { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean; }
+const DEFAULT_VOICE_SETTINGS: VoiceSettings = { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true };
 
 function audioMime(fmt: string): string {
   const map: Record<string, string> = {
@@ -73,6 +82,18 @@ function purge(store: ChatStore): ChatStore {
 }
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+function SliderRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <div className="flex justify-between text-[10px] text-warm-grey mb-1">
+        <span>{label}</span><span>{value.toFixed(2)}</span>
+      </div>
+      <input type="range" min={0} max={1} step={0.05} value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full accent-silk-gold" />
+    </div>
+  );
+}
 
 function ActionBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
   return (
@@ -117,14 +138,61 @@ export default function Chat() {
     }
   }, [modeModels, model]);
 
+  // Voice controls (audio mode).
+  const selectedModel = useMemo(() => modeModels.find((m: any) => m.id === model), [modeModels, model]);
+  const isElevenlabs = selectedModel?.provider_id === "elevenlabs";
+  const [voice, setVoice] = useState<string>("alloy");
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+
+  const { data: elVoices } = useQuery({
+    queryKey: ["el-voices"],
+    queryFn: () => mediaApi.voices("elevenlabs").then((r) => r.data.voices as any[]),
+    enabled: mode === "audio" && isElevenlabs,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  // Keep the selected speaker valid for the chosen provider.
   useEffect(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(store));
-    } catch {
-      // Generated media (base64 data URIs) can exceed the localStorage quota.
-      toast.error("Local storage is full. Delete some chats or generated media to keep saving.");
+    if (mode !== "audio") return;
+    if (isElevenlabs) {
+      if (elVoices?.length && !elVoices.some((v) => v.voice_id === voice)) setVoice(elVoices[0].voice_id);
+    } else if (!OPENAI_VOICES.includes(voice)) {
+      setVoice("alloy");
+    }
+  }, [mode, isElevenlabs, elVoices, voice]);
+
+  useEffect(() => {
+    // Persist; if the browser refuses (quota exceeded, e.g. from generated media),
+    // evict the oldest chats first (FIFO) until it fits, then sync state.
+    let toStore = store;
+    let evicted = 0;
+    for (;;) {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(toStore));
+        break;
+      } catch {
+        if (toStore.conversations.length === 0) {
+          toast.error("Local storage is full and could not be freed.");
+          break;
+        }
+        const oldest = toStore.conversations.reduce((a, b) => (a.createdAt <= b.createdAt ? a : b));
+        toStore = { ...toStore, conversations: toStore.conversations.filter((c) => c.id !== oldest.id) };
+        evicted += 1;
+      }
+    }
+    if (evicted > 0) {
+      toast.error(`Storage was full. Removed ${evicted} oldest chat${evicted > 1 ? "s" : ""} to make room.`);
+      setStore(toStore);
     }
   }, [store]);
+
+  // Storage usage, for the progress bar and low-space warning.
+  const usedChars = useMemo(() => JSON.stringify(store).length, [store]);
+  const storagePct = Math.min(100, Math.round((usedChars / STORAGE_BUDGET) * 100));
+  const storageMB = ((usedChars * 2) / 1048576).toFixed(2);
+  const budgetMB = ((STORAGE_BUDGET * 2) / 1048576).toFixed(1);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [activeId, liveText, store]);
 
   const active = useMemo(() => store.conversations.find((c) => c.id === activeId) || null, [store, activeId]);
@@ -168,10 +236,13 @@ export default function Chat() {
 
   // Generate an image, audio clip, or video from a prompt and append it as an
   // assistant message whose content the Markdown renderer displays inline.
-  async function runMediaGeneration(convId: string, kind: Exclude<Mode, "text">, prompt: string, modelId?: string) {
+  async function runMediaGeneration(
+    convId: string, kind: Exclude<Mode, "text">, prompt: string,
+    opts?: { modelId?: string; voice?: string; voiceSettings?: VoiceSettings; elevenlabs?: boolean },
+  ) {
     setStreaming(true);
     setLiveText("");
-    const useModel = modelId || (allModels || []).find((m: any) => (m.modality || "text") === kind)?.id;
+    const useModel = opts?.modelId || (allModels || []).find((m: any) => (m.modality || "text") === kind)?.id;
     try {
       let content = "";
       if (kind === "image") {
@@ -179,7 +250,10 @@ export default function Chat() {
         const parts = (data.images || []).filter(Boolean).map(toImageContent);
         content = parts.join("\n") || "(no image was returned)";
       } else if (kind === "audio") {
-        const { data } = await mediaApi.audio({ prompt, model: useModel });
+        const { data } = await mediaApi.audio({
+          prompt, model: useModel, voice: opts?.voice,
+          voice_settings: opts?.elevenlabs ? opts?.voiceSettings : undefined,
+        });
         content = data.audio_b64 ? `data:${audioMime(data.format)};base64,${data.audio_b64}` : "(no audio was returned)";
       } else {
         const { data } = await mediaApi.video({ prompt, model: useModel });
@@ -222,7 +296,7 @@ export default function Chat() {
     if (mode === "text") {
       await runGeneration(convId!, history);
     } else {
-      await runMediaGeneration(convId!, mode, prompt, model);
+      await runMediaGeneration(convId!, mode, prompt, { modelId: model, voice, voiceSettings, elevenlabs: isElevenlabs });
     }
   }
 
@@ -244,7 +318,7 @@ export default function Chat() {
       runGeneration(activeId, history);
     } else {
       const prompt = history[history.length - 1]?.content || "";
-      runMediaGeneration(activeId, kind, prompt);
+      runMediaGeneration(activeId, kind, prompt, { voice, voiceSettings, elevenlabs: isElevenlabs });
     }
   }
 
@@ -298,6 +372,23 @@ export default function Chat() {
           {EXPIRY_OPTIONS.map((o) => <option key={o.days} value={o.days}>{o.label}</option>)}
         </select>
         <p className="text-[10px] text-muted-metal mt-1.5">Stored only in this browser. We never keep your chats.</p>
+      </div>
+
+      {/* Local storage usage */}
+      <div className="mt-3 pt-3 border-t border-muted-metal/40">
+        <div className="flex justify-between text-[10px] text-warm-grey mb-1">
+          <span>Storage used</span>
+          <span>{storageMB} / {budgetMB} MB</span>
+        </div>
+        <div className="w-full h-1.5 rounded-full bg-cloud-grey dark:bg-deep-charcoal overflow-hidden">
+          <div className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${storagePct}%`, background: storagePct >= 85 ? "#ef4444" : storagePct >= 60 ? "#FAC059" : "#D29A2D" }} />
+        </div>
+        {storagePct >= 85 && (
+          <p className="text-[10px] text-red-400 mt-1">
+            Almost full. Delete old chats or media. When full, the oldest chats are removed automatically.
+          </p>
+        )}
       </div>
     </>
   );
@@ -412,6 +503,50 @@ export default function Chat() {
                 </button>
               ))}
             </div>
+
+            {/* Audio speaker + voice settings */}
+            {mode === "audio" && modeModels.length > 0 && (
+              <div className="px-3 pt-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="text-[11px] text-warm-grey">Speaker</label>
+                  <select value={voice} onChange={(e) => setVoice(e.target.value)}
+                    className="input py-1 text-xs w-auto max-w-[220px]">
+                    {isElevenlabs
+                      ? (elVoices || []).map((v) => (
+                          <option key={v.voice_id} value={v.voice_id}>
+                            {v.name}{v.labels?.gender ? ` (${v.labels.gender})` : ""}
+                          </option>
+                        ))
+                      : OPENAI_VOICES.map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  {isElevenlabs && (
+                    <button onClick={() => setShowVoiceSettings((s) => !s)}
+                      className="text-[11px] text-silk-gold hover:underline inline-flex items-center gap-1">
+                      <Sliders size={12} /> Voice settings
+                    </button>
+                  )}
+                  {isElevenlabs && !elVoices && (
+                    <span className="text-[10px] text-muted-metal">Loading speakers...</span>
+                  )}
+                </div>
+                {isElevenlabs && showVoiceSettings && (
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-cloud-grey dark:bg-deep-charcoal">
+                    <SliderRow label="Stability" value={voiceSettings.stability}
+                      onChange={(v) => setVoiceSettings((s) => ({ ...s, stability: v }))} />
+                    <SliderRow label="Similarity" value={voiceSettings.similarity_boost}
+                      onChange={(v) => setVoiceSettings((s) => ({ ...s, similarity_boost: v }))} />
+                    <SliderRow label="Style" value={voiceSettings.style}
+                      onChange={(v) => setVoiceSettings((s) => ({ ...s, style: v }))} />
+                    <label className="flex items-center gap-2 text-xs text-warm-grey sm:col-span-3">
+                      <input type="checkbox" checked={voiceSettings.use_speaker_boost}
+                        onChange={(e) => setVoiceSettings((s) => ({ ...s, use_speaker_boost: e.target.checked }))}
+                        className="accent-silk-gold" />
+                      Speaker boost
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="px-3 pb-3 pt-2 flex items-end gap-2">
               <textarea

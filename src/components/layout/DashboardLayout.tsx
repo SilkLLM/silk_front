@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { notificationsApi, trialApi } from "@/services/api";
+import PaymentReminderModal from "@/components/PaymentReminderModal";
 import {
   LayoutDashboard, Key, CreditCard, BarChart2, MessageSquare, Coins,
   Settings, Bell, Users, Zap, PlusCircle, LogOut, Menu, Store,
@@ -188,6 +189,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+
+      <PaymentReminderModal />
     </div>
   );
 }

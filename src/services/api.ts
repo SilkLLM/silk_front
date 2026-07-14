@@ -26,13 +26,25 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ── Response interceptor: handle 401 ──────────────────────────────────────
+/**
+ * Broadcast that a request failed for lack of credit, so the UI can show a
+ * "add credits" reminder. Fired by the 402 interceptor and by the chat stream
+ * (which uses fetch, not axios).
+ */
+export function notifyNeedCredit(detail?: string) {
+  window.dispatchEvent(new CustomEvent("silk:need-credit", { detail }));
+}
+
+// ── Response interceptor: handle 401 (auth) and 402 (out of credit) ─────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    if (status === 401) {
       localStorage.removeItem("silk_token");
       window.location.href = "/login";
+    } else if (status === 402) {
+      notifyNeedCredit(error.response?.data?.error?.message || error.response?.data?.detail);
     }
     return Promise.reject(error);
   }
@@ -130,6 +142,7 @@ export const generateApi = {
       });
       if (!response.ok) {
         const errorText = await response.text();
+        if (response.status === 402) notifyNeedCredit(errorText);
         onError(errorText);
         return;
       }
@@ -203,13 +216,25 @@ export const notificationsApi = {
 };
 
 // ── Multimodal generation (uses the session token) ─────────────────────────
+export interface VoiceSettings {
+  stability?: number;
+  similarity_boost?: number;
+  style?: number;
+  use_speaker_boost?: boolean;
+  speed?: number;
+}
+
 export const mediaApi = {
   image: (data: { prompt: string; model?: string; provider?: string; n?: number; size?: string }) =>
     api.post("/generate/image", data),
-  audio: (data: { prompt: string; model?: string; provider?: string; voice?: string }) =>
-    api.post("/generate/audio", data),
+  audio: (data: {
+    prompt: string; model?: string; provider?: string; voice?: string;
+    voice_settings?: VoiceSettings; output_format?: string;
+  }) => api.post("/generate/audio", data),
   video: (data: { prompt: string; model?: string; provider?: string; seconds?: number }) =>
     api.post("/generate/video", data),
+  // Speakers for a voice provider (ElevenLabs). Used to render a speaker picker.
+  voices: (provider = "elevenlabs") => api.get("/generate/audio/voices", { params: { provider } }),
 };
 
 // Admin APIs (full CRUD)

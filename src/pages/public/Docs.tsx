@@ -127,6 +127,39 @@ console.log(img.count, img.images);
 // Audio (text to speech), base64
 const audio = await client.generateAudio({ prompt: "Hello from SilkLLM", model: "tts-1" });
 console.log(audio.format, audio.audio_b64.length);`,
+
+  pyVoice: `from silkllm import VoiceSettings
+
+# List the speakers available on your ElevenLabs account
+voices = client.list_voices()  # provider="elevenlabs" by default
+for v in voices:
+    print(v.voice_id, v.name, v.labels)
+
+# Generate speech with a chosen speaker and voice settings
+audio = client.generate_audio(
+    prompt="Welcome to SilkLLM. One key, every model.",
+    model="eleven_multilingual_v2",
+    voice=voices[0].voice_id,
+    voice_settings=VoiceSettings(
+        stability=0.5, similarity_boost=0.75, style=0.2, use_speaker_boost=True,
+    ),
+    output_format="mp3_44100_128",
+)
+print(audio.voice, audio.format, len(audio.audio_b64))`,
+
+  jsVoice: `// List the speakers available on your ElevenLabs account
+const { voices } = await client.listVoices(); // "elevenlabs" by default
+voices.forEach((v) => console.log(v.voice_id, v.name, v.labels));
+
+// Generate speech with a chosen speaker and voice settings
+const audio = await client.generateAudio({
+  prompt: "Welcome to SilkLLM. One key, every model.",
+  model: "eleven_multilingual_v2",
+  voice: voices[0].voice_id,
+  voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.2, use_speaker_boost: true },
+  output_format: "mp3_44100_128",
+});
+console.log(audio.voice, audio.format, audio.audio_b64.length);`,
 };
 
 // ── Lightweight syntax colorizer ─────────────────────────────────────────────
@@ -324,10 +357,11 @@ const SECTIONS = [
             ["Someone else's public key", "cost + 10%", "75% of cost"],
             ["Your own public key", "cost + 10%", "nothing"],
             ["Your own private key", "cost + 25%", "nothing"],
-            ["Free model or free key", "0", "0"],
+            ["Free model (during trial)", "0", "0"],
+            ["Free model (paying from balance)", "cost + 10%", "0"],
           ]}
         />
-        <Callout>A working marketplace key with budget always takes priority over the platform key.</Callout>
+        <Callout>A working marketplace key with budget always takes priority over the platform key. Free models are free only while a trial covers the request; once you are paying from balance they are billed like any other model (their provider cost is near zero, so the charge is tiny, but a request still needs credit).</Callout>
       </>
     ),
   },
@@ -336,6 +370,7 @@ const SECTIONS = [
     body: (
       <>
         <Para>Every new account gets a daily free allowance for the first three months, enforced at the gateway so it works through the API and SDKs. When your balance cannot cover a request, an active trial covers it at no charge (served by free models or the platform key).</Para>
+        <Para>The trial is what makes free models free. Once your daily trial allowance is used up, or the three-month window ends, requests draw from your balance, including requests to free models. If you have no credit at that point the request fails with a clear message asking you to add credits, both in the API/SDK and in the dashboard.</Para>
         <LangTabs python={CODE.pyTrial} javascript={CODE.jsTrial} />
       </>
     ),
@@ -352,8 +387,13 @@ const SECTIONS = [
             ["POST", "/api/generate/image", "Image generation (URLs or base64)"],
             ["POST", "/api/generate/audio", "Text to speech (base64 audio)"],
             ["POST", "/api/generate/video", "Video generation, where supported"],
+            ["GET", "/api/generate/audio/voices", "List ElevenLabs speakers"],
           ]}
         />
+        <H3>Voices and speakers (ElevenLabs)</H3>
+        <Para>For expressive speech, pick an ElevenLabs model and a speaker, and shape delivery with voice settings (stability, similarity, style, speaker boost). List the speakers on your account, then pass a <code className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: "#1A1C1D", color: "#D29A2D" }}>voice</code> id. OpenAI TTS uses fixed voice names (alloy, echo, fable, onyx, nova, shimmer) instead.</Para>
+        <LangTabs python={CODE.pyVoice} javascript={CODE.jsVoice} />
+        <Callout>Add your ElevenLabs API key under Admin, Providers. Its voice models then serve just like any other model, priced per character.</Callout>
       </>
     ),
   },
