@@ -1,1670 +1,616 @@
 /**
- * Landing.tsx - SilkLLM 2026 Living Landing Page
- * Optimized: lighter canvas, throttled mouse, no blend-mode cursor issues.
- * - Magnetic cursor (no mix-blend-mode, avoids compositing bugs)
- * - Breathing noise mesh (pauses when off-screen, ~20fps, no grid)
- * - Throttled hero mouse tracking (RAF-based)
- * - Provider cards with fluid surface-tension hover
- * - Code block types itself when it enters viewport
- * All routes preserved from original App.tsx
+ * Landing.tsx
+ * The marketing page.
+ *
+ * Rebuilt on the same tokens as the dashboard. The previous version was locked
+ * to a dark palette and took over the mouse cursor, so a visitor who preferred
+ * light mode got a jarring switch on every navigation, and pointer behaviour
+ * stopped matching the rest of the system. Both are gone.
+ *
+ * Motion is present but restrained, and every animated block degrades to a
+ * static one under prefers-reduced-motion via the global media query.
  */
 
 // File: silkllm-frontend/src/pages/public/Landing.tsx
 
-import React, {
-  useRef, useEffect, useState, useCallback, useMemo
-} from "react";
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform,
-         useScroll } from "framer-motion";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion, useInView } from "framer-motion";
 import {
-  ArrowRight, ChevronDown, Coins, Type, Image as ImageIcon, AudioLines,
-  Video, ShieldCheck, Sparkles, Gift, Mic, Play, Wand2, Download,
+  ArrowRight, AudioLines, Check, Coins, Copy, Gauge, Image as ImageIcon, Key,
+  Layers, Lock, Mic, ShieldCheck, Sparkles, Type, Video, Wand2,
 } from "lucide-react";
+import clsx from "clsx";
+import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
+import { Badge } from "@/components/ui";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAGNETIC CURSOR - no mixBlendMode to prevent white-section compositing bugs
-// ─────────────────────────────────────────────────────────────────────────────
-function MagneticCursor() {
-  const cursorX  = useMotionValue(-100);
-  const cursorY  = useMotionValue(-100);
-  // Softer springs for less jitter
-  const trailX   = useSpring(cursorX, { stiffness: 60,  damping: 20 });
-  const trailY   = useSpring(cursorY, { stiffness: 60,  damping: 20 });
-  const dotX     = useSpring(cursorX, { stiffness: 300, damping: 30 });
-  const dotY     = useSpring(cursorY, { stiffness: 300, damping: 30 });
-  const [pressed, setPressed] = useState(false);
-  const [hovered, setHovered] = useState(false);
+// ── Content ─────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const move = (e: MouseEvent) => { cursorX.set(e.clientX); cursorY.set(e.clientY); };
-    const down = () => setPressed(true);
-    const up   = () => setPressed(false);
-    const over = (e: MouseEvent) => {
-      const el = e.target as HTMLElement;
-      setHovered(!!(el.closest("a,button,[data-magnetic]")));
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mousedown", down);
-    window.addEventListener("mouseup",   up);
-    window.addEventListener("mouseover", over);
-    return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mousedown", down);
-      window.removeEventListener("mouseup",   up);
-      window.removeEventListener("mouseover", over);
-    };
-  }, [cursorX, cursorY]);
-
-  const ringSize = hovered ? 40 : 24;
-
-  return (
-    <>
-      {/* Ring - no mix-blend-mode, uses soft shadow for visibility */}
-      <motion.div
-        className="fixed top-0 left-0 pointer-events-none z-[9999] rounded-full"
-        style={{
-          x: useTransform(trailX, v => v - ringSize / 2),
-          y: useTransform(trailY, v => v - ringSize / 2),
-          width: ringSize,
-          height: ringSize,
-          border: "1.5px solid #D29A2D",
-          scale: pressed ? 0.7 : 1,
-          opacity: 0.85,
-          boxShadow: "0 0 18px rgba(210,154,45,0.3), 0 0 4px rgba(210,154,45,0.5)",
-          transition: "width 0.25s, height 0.25s",
-        }}
-      />
-      {/* Dot */}
-      <motion.div
-        className="fixed top-0 left-0 pointer-events-none z-[9999] rounded-full"
-        style={{
-          x: useTransform(dotX, v => v - 3),
-          y: useTransform(dotY, v => v - 3),
-          width: 6,
-          height: 6,
-          background: "#D29A2D",
-          opacity: hovered ? 0 : 1,
-          boxShadow: "0 0 10px rgba(210,154,45,0.6)",
-          transition: "opacity 0.2s",
-        }}
-      />
-    </>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// BREATHING NOISE MESH - optimized: ~20fps, no grid, 2 orbs, pauses off-screen
-// ─────────────────────────────────────────────────────────────────────────────
-function NoiseMesh({ mouseX, mouseY }: { mouseX: number; mouseY: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mouseRef  = useRef({ x: 0.5, y: 0.5 });
-  const t         = useRef(0);
-  const frameCount = useRef(0);
-  const rafId      = useRef<number>(0);
-  const isVisible  = useRef(true);
-
-  // Update mouse ref when props change (throttled by parent)
-  useEffect(() => {
-    mouseRef.current = { x: mouseX, y: mouseY };
-  }, [mouseX, mouseY]);
-
-  useEffect(() => {
-    const c = canvasRef.current!;
-    const ctx = c.getContext("2d")!;
-
-    const resize = () => {
-      c.width = window.innerWidth;
-      c.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    // Pause canvas when scrolled out of view
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        isVisible.current = entry.isIntersecting;
-        if (entry.isIntersecting && !rafId.current) {
-          // Resume
-          draw();
-        }
-      },
-      { threshold: 0 }
-    );
-    observer.observe(c);
-
-    const draw = () => {
-      if (!isVisible.current) {
-        rafId.current = 0;
-        return;
-      }
-
-      rafId.current = requestAnimationFrame(draw);
-
-      // Draw only every 3rd frame (~20fps) for huge GPU savings
-      frameCount.current++;
-      if (frameCount.current % 3 !== 0) return;
-
-      t.current += 0.012; // scaled up to match ~20fps timing
-      const W = c.width;
-      const H = c.height;
-      ctx.clearRect(0, 0, W, H);
-
-      // base radial gradient
-      const base = ctx.createRadialGradient(W / 2, H * 0.4, 0, W / 2, H * 0.4, W);
-      base.addColorStop(0, "#1A1900");
-      base.addColorStop(0.4, "#0F1010");
-      base.addColorStop(1, "#080809");
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W, H);
-
-      // mouse bloom
-      const mx = mouseRef.current.x * W;
-      const my = mouseRef.current.y * H;
-      const bloom = ctx.createRadialGradient(mx, my, 0, mx, my, W * 0.5);
-      bloom.addColorStop(0, "rgba(210,154,45,0.08)");
-      bloom.addColorStop(0.5, "rgba(210,154,45,0.015)");
-      bloom.addColorStop(1, "transparent");
-      ctx.fillStyle = bloom;
-      ctx.fillRect(0, 0, W, H);
-
-      // Only 2 breathing orbs (was 3) - lighter on GPU
-      [
-        { bx: 0.25, by: 0.3, sx: 0.05, sy: 0.04, ts: 0.7, tc: 0.9, r: 0.36, ca: "rgba(210,154,45,", p: 0.02 },
-        { bx: 0.75, by: 0.6, sx: 0.04, sy: 0.05, ts: 0.5, tc: 0.6, r: 0.28, ca: "rgba(77,78,42,",   p: 0.014 },
-      ].forEach(o => {
-        const ox = o.bx + o.sx * Math.sin(t.current * o.ts);
-        const oy = o.by + o.sy * Math.cos(t.current * o.tc);
-        const pulse = o.p + 0.005 * Math.sin(t.current * 2.1 + o.r);
-        const g = ctx.createRadialGradient(ox * W, oy * H, 0, ox * W, oy * H, o.r * W);
-        g.addColorStop(0, o.ca + pulse + ")");
-        g.addColorStop(0.55, o.ca + "0.003)");
-        g.addColorStop(1, "transparent");
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W, H);
-      });
-
-      // No more grid - saves dozens of stroke calls per frame
-    };
-
-    draw();
-
-    return () => {
-      cancelAnimationFrame(rafId.current);
-      rafId.current = 0;
-      observer.disconnect();
-      window.removeEventListener("resize", resize);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      style={{ willChange: "transform" }}
-    />
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPEWRITER CODE BLOCK
-// ─────────────────────────────────────────────────────────────────────────────
-const CODE_LINES = [
-  { text: "import silkllm",                               color: "#D0C51E" },
-  { text: "",                                             color: "" },
-  { text: `client = silkllm.Client(api_key="silk_...")`,  color: "#EDEFF0" },
-  { text: "",                                             color: "" },
-  { text: "response = client.generate(",                  color: "#EDEFF0" },
-  { text: `    model="gpt-4o",   # or claude, gemini`,    color: "#595F61" },
-  { text: `    messages=[{"role": "user",`,               color: "#B5B86B" },
-  { text: `               "content": "Hello!"}]`,         color: "#B5B86B" },
-  { text: ")",                                            color: "#EDEFF0" },
-  { text: "",                                             color: "" },
-  { text: "print(response.content)",                      color: "#74aa9c" },
-  { text: "# Cost: $0.0023 | Balance: $47.82",            color: "#595F61" },
+const PROVIDERS = [
+  { name: "OpenAI",     color: "#74aa9c", sub: "GPT-4o, o3, o1" },
+  { name: "Anthropic",  color: "#D97757", sub: "Claude 3.5, 3.7 Sonnet" },
+  { name: "Google",     color: "#4285f4", sub: "Gemini 2.0, 1.5 Flash" },
+  { name: "DeepSeek",   color: "#5BC4F5", sub: "V3, R1, Coder" },
+  { name: "xAI",        color: "#9AA0A6", sub: "Grok 3, Grok 3 Mini" },
+  { name: "Groq",       color: "#F55036", sub: "Llama, Mixtral, free" },
+  { name: "Cerebras",   color: "#5EC26A", sub: "Llama, free tier" },
+  { name: "OpenRouter", color: "#8B93A7", sub: "Free open models" },
+  { name: "ElevenLabs", color: "#A78BFA", sub: "Voices, cloning, STS" },
 ];
 
-function TypewriterCode() {
-  const ref      = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [chars,   setChars]   = useState(0);
-  const allChars = CODE_LINES.reduce((a, l) => a + l.text.length + 1, 0);
+const MODALITIES = [
+  { icon: <Type size={20} />,       name: "Text",  sub: "Chat, reasoning, vision input" },
+  { icon: <ImageIcon size={20} />,  name: "Image", sub: "Generation across providers" },
+  { icon: <AudioLines size={20} />, name: "Voice", sub: "Speech, cloning, conversion" },
+  { icon: <Video size={20} />,      name: "Video", sub: "Where providers support it" },
+];
+
+const EARN_STEPS = [
+  { icon: <Key size={18} />,         title: "Deposit a key",  desc: "Add your own provider key and mark it public." },
+  { icon: <Sparkles size={18} />,    title: "Others use it",  desc: "The router serves other users through it." },
+  { icon: <Coins size={18} />,       title: "You earn 75%",   desc: "Credited to your balance as it is used." },
+  { icon: <ShieldCheck size={18} />, title: "Spend anywhere", desc: "Those credits work on any model." },
+];
+
+const STEPS = [
+  { n: "01", title: "Connect",  desc: "Sign in with Google or GitHub, generate a key, and add credits with a card or a bank transfer." },
+  { n: "02", title: "Generate", desc: "Call one endpoint with any model. The router picks a healthy provider and falls back on its own if one fails." },
+  { n: "03", title: "Pay",      desc: "Credits come off per request at provider cost plus 10%. No subscription, no minimum, no expiry." },
+];
+
+const PRICES = [
+  { label: "Gemini 1.5 Flash",  price: "$0.000083", color: "#4285f4" },
+  { label: "DeepSeek V3",       price: "$0.00028",  color: "#5BC4F5" },
+  { label: "Grok 3 Mini",       price: "$0.00033",  color: "#9AA0A6" },
+  { label: "Claude 3.5 Sonnet", price: "$0.0033",   color: "#D97757" },
+  { label: "GPT-4o",            price: "$0.0055",   color: "#74aa9c" },
+];
+
+const VOICE_FEATURES = [
+  { icon: <AudioLines size={14} />, label: "Text to speech" },
+  { icon: <Mic size={14} />,        label: "Voice changer" },
+  { icon: <Wand2 size={14} />,      label: "Instant cloning" },
+  { icon: <Sparkles size={14} />,   label: "Fine controls" },
+];
+
+const GUARANTEES = [
+  { icon: <Lock size={17} />,        title: "Your chats stay yours",   desc: "Conversations live in your browser's storage. We never persist them, and you choose when they expire." },
+  { icon: <ShieldCheck size={17} />, title: "Keys encrypted at rest",  desc: "Provider keys are encrypted with a key derived per deployment, and are never shown again after you save them." },
+  { icon: <Gauge size={17} />,       title: "Automatic failover",      desc: "Every model carries a fallback chain, so a provider outage becomes a retry rather than an incident." },
+];
+
+const CODE = [
+  { t: "import silkllm", c: "kw" },
+  { t: "", c: "" },
+  { t: "client = silkllm.Client()", c: "fn" },
+  { t: "", c: "" },
+  { t: "res = client.generate(", c: "fn" },
+  { t: '    messages=[{"role": "user",', c: "str" },
+  { t: '               "content": "Hello"}],', c: "str" },
+  { t: '    model="gpt-4o",', c: "str" },
+  { t: ")", c: "fn" },
+  { t: "", c: "" },
+  { t: "print(res.content)", c: "fn" },
+];
+
+// ── Building blocks ─────────────────────────────────────────────────────────
+
+/** Fades its children up the first time they enter the viewport. */
+function Reveal({ children, delay = 0, className }: {
+  children: React.ReactNode; delay?: number; className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-80px" });
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      initial={{ opacity: 0, y: 16 }}
+      animate={inView ? { opacity: 1, y: 0 } : undefined}
+      transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function Section({ id, className, children }: {
+  id?: string; className?: string; children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className={clsx("py-16 sm:py-24 scroll-mt-20", className)}>
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 px-safe">{children}</div>
+    </section>
+  );
+}
+
+function SectionHead({ eyebrow, title, sub, center }: {
+  eyebrow?: string; title: string; sub?: string; center?: boolean;
+}) {
+  return (
+    <Reveal className={clsx("max-w-2xl", center && "mx-auto text-center")}>
+      {eyebrow && (
+        <p className="text-2xs font-semibold uppercase tracking-[0.14em] text-accent-ink mb-3">{eyebrow}</p>
+      )}
+      <h2 className="font-display text-[1.75rem] sm:text-4xl font-bold tracking-tight text-ink leading-[1.15]">
+        {title}
+      </h2>
+      {sub && <p className="text-base text-ink-2 mt-4 leading-relaxed">{sub}</p>}
+    </Reveal>
+  );
+}
+
+// ── Hero ────────────────────────────────────────────────────────────────────
+
+/** The code panel types itself out once, then holds. */
+function CodePanel() {
+  const [shown, setShown] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true });
 
   useEffect(() => {
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) setVisible(true); },
-      { threshold: 0.3 }
-    );
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, []);
+    if (!inView || shown >= CODE.length) return;
+    const t = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 250 : 90);
+    return () => clearTimeout(t);
+  }, [inView, shown]);
 
-  useEffect(() => {
-    if (!visible || chars >= allChars) return;
-    const id = setTimeout(() => setChars(c => c + (Math.random() > 0.7 ? 3 : 1)), 18);
-    return () => clearTimeout(id);
-  }, [visible, chars, allChars]);
+  const source = useMemo(() => CODE.map((l) => l.t).join("\n").trim(), []);
 
   return (
-    <div
-      ref={ref}
-      className="rounded-2xl overflow-hidden"
-      style={{
-        background: "#0D0E0F",
-        border: "1px solid #1E2022",
-        boxShadow: "0 32px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(210,154,45,0.06)",
-      }}
-    >
-      {/* Title bar */}
-      <div
-        className="flex items-center gap-2 px-5 py-3.5"
-        style={{ borderBottom: "1px solid #1A1C1E", background: "#111314" }}
-      >
-        <div className="flex gap-1.5">
-          {["#ff5f57", "#ffbd2e", "#28ca41"].map(c => (
-            <div key={c} className="w-2.5 h-2.5 rounded-full" style={{ background: c, opacity: 0.7 }} />
+    <div ref={ref} className="rounded-2xl border border-line bg-surface shadow-raised overflow-hidden">
+      <div className="flex items-center gap-2 px-4 h-11 border-b border-line bg-sunken">
+        <span className="flex gap-1.5" aria-hidden="true">
+          {["#ef4444", "#f5a623", "#22c55e"].map((c) => (
+            <span key={c} className="w-2.5 h-2.5 rounded-full opacity-70" style={{ background: c }} />
           ))}
-        </div>
-        <span className="ml-3 text-xs font-mono" style={{ color: "#3A3F42" }}>example.py</span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#28ca41" }} />
-          <span className="text-xs font-mono" style={{ color: "#28ca41", opacity: 0.7 }}>live</span>
-        </div>
+        </span>
+        <span className="text-2xs font-mono text-ink-3 ml-1">quickstart.py</span>
+        <span className="flex-1" />
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(source);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1600);
+          }}
+          className="inline-flex items-center gap-1 text-2xs text-ink-3 hover:text-ink transition-colors"
+        >
+          {copied ? <><Check size={12} className="text-success" /> Copied</> : <><Copy size={12} /> Copy</>}
+        </button>
       </div>
-      {/* Code area */}
-      <pre className="p-6 text-sm font-mono leading-7 overflow-x-auto" style={{ minHeight: 300, margin: 0 }}>
-        {CODE_LINES.map((line, li) => {
-          const start = CODE_LINES.slice(0, li).reduce((a, l) => a + l.text.length + 1, 0);
-          const end   = start + line.text.length;
-          const show  = Math.max(0, Math.min(line.text.length, chars - start));
-          if (chars < start) return null;
-          return (
-            <div key={li}>
-              <span style={{ color: line.color || "#EDEFF0" }}>{line.text.slice(0, show)}</span>
-              {chars >= start && chars < end && (
-                <span className="animate-pulse" style={{ borderRight: "2px solid #D29A2D" }}>&nbsp;</span>
+      <pre className="p-4 sm:p-5 text-[13px] leading-6 font-mono overflow-x-auto">
+        <code>
+          {CODE.slice(0, shown).map((l, i) => (
+            <div
+              key={i}
+              className={clsx(
+                l.c === "kw" && "text-accent-ink",
+                l.c === "str" && "text-ink-2",
+                l.c === "fn" && "text-ink",
+                !l.c && "h-6",
               )}
+            >
+              {l.t || " "}
             </div>
-          );
-        })}
+          ))}
+          {shown < CODE.length && (
+            <span className="inline-block w-2 h-4 align-middle bg-accent animate-pulse" />
+          )}
+        </code>
       </pre>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PROVIDER CARD - tilt + glow on hover (unchanged visually, slightly lighter)
-// ─────────────────────────────────────────────────────────────────────────────
-const PROVIDERS = [
-  { name: "OpenAI",     color: "#74aa9c", sub: "GPT-4o · o3 · o1"        },
-  { name: "Anthropic",  color: "#D97757", sub: "Claude 3.5 · 3.7 Sonnet" },
-  { name: "Google",     color: "#4285f4", sub: "Gemini 2.0 · 1.5 Flash"  },
-  { name: "DeepSeek",   color: "#5BC4F5", sub: "V3 · R1 · Coder"         },
-  { name: "xAI",        color: "#D8D8D8", sub: "Grok 3 · Grok 3 Mini"    },
-  { name: "Groq",       color: "#F55036", sub: "Llama · Mixtral · free"  },
-  { name: "Cerebras",   color: "#5EC26A", sub: "Llama · free tier"       },
-  { name: "OpenRouter", color: "#8B93A7", sub: "Free open models"        },
-  { name: "ElevenLabs", color: "#A78BFA", sub: "Voices · cloning · STS"  },
-];
-
-function ProviderCard({ name, color, sub, index }: (typeof PROVIDERS)[0] & { index: number }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const rotX = useMotionValue(0);
-  const rotY = useMotionValue(0);
-  const glow = useMotionValue(0);
-  const sRotX = useSpring(rotX, { stiffness: 180, damping: 22 });
-  const sRotY = useSpring(rotY, { stiffness: 180, damping: 22 });
-  const sGlow = useSpring(glow, { stiffness: 120, damping: 28 });
-
-  const onMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const r = cardRef.current!.getBoundingClientRect();
-    rotX.set(((e.clientY - r.top - r.height / 2) / r.height) * -10);
-    rotY.set(((e.clientX - r.left - r.width / 2) / r.width) * 10);
-    glow.set(1);
-  }, [rotX, rotY, glow]);
-
-  const onLeave = useCallback(() => {
-    rotX.set(0);
-    rotY.set(0);
-    glow.set(0);
-  }, [rotX, rotY, glow]);
-
-  return (
-    <motion.div
-      ref={cardRef}
-      data-magnetic
-      initial={{ opacity: 0, y: 40 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.7, delay: index * 0.09, ease: [0.16, 1, 0.3, 1] }}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      style={{ rotateX: sRotX, rotateY: sRotY, transformStyle: "preserve-3d", perspective: 600 }}
-      className="relative rounded-2xl cursor-default"
-    >
-      {/* Glow overlay */}
-      <motion.div
-        className="absolute inset-0 rounded-2xl pointer-events-none"
-        style={{
-          background: `linear-gradient(135deg, ${color}33, transparent 55%)`,
-          opacity: sGlow,
-        }}
-      />
-      {/* Card body */}
-      <div
-        className="relative rounded-2xl px-6 py-5"
-        style={{ background: "#0F1011", border: "1px solid #1E2022" }}
-      >
-        <motion.div
-          className="w-2.5 h-2.5 rounded-full mb-4"
-          style={{ background: color }}
-          animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
-          transition={{ duration: 2.5 + index * 0.3, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <div
-          className="font-display font-semibold text-base mb-1"
-          style={{ color: "#EDEFF0", letterSpacing: "-0.01em" }}
-        >
-          {name}
-        </div>
-        <div className="text-xs font-mono" style={{ color: "#595F61" }}>
-          {sub}
-        </div>
-        {/* Bottom glow line */}
-        <motion.div
-          className="absolute bottom-0 left-0 right-0 h-px rounded-b-2xl"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
-            opacity: sGlow,
-          }}
-        />
-      </div>
-    </motion.div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ANIMATED STAT COUNT-UP
-// ─────────────────────────────────────────────────────────────────────────────
-function AnimatedStat({ value, label, delay = 0 }: { value: string; label: string; delay?: number }) {
-  const ref    = useRef<HTMLDivElement>(null);
-  const fired  = useRef(false);
-  const [display, setDisplay] = useState("-");
-
-  useEffect(() => {
-    const obs = new IntersectionObserver(
-      ([e]) => {
-        if (!e.isIntersecting || fired.current) return;
-        fired.current = true;
-        const num = parseFloat(value);
-        const hasPlus = value.includes("+");
-        const hasPct  = value.includes("%");
-        const dur = 1300;
-        const startAt = Date.now() + delay * 1000;
-        const tick = () => {
-          const now = Date.now();
-          if (now < startAt) {
-            requestAnimationFrame(tick);
-            return;
-          }
-          const p = Math.min((now - startAt) / dur, 1);
-          const ease = 1 - Math.pow(1 - p, 3);
-          const v = num * ease;
-          const formatted = hasPct
-            ? v.toFixed(1) + "%"
-            : v >= 10
-              ? Math.round(v) + (hasPlus ? "+" : "")
-              : v.toFixed(0) + (hasPlus ? "+" : "");
-          setDisplay(formatted);
-          if (p < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      },
-      { threshold: 0.5 }
-    );
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [value, label, delay]);
-
-  return (
-    <div ref={ref} className="text-center">
-      <div
-        className="font-display font-bold text-4xl md:text-5xl mb-1.5"
-        style={{ color: "#D29A2D", letterSpacing: "-0.04em" }}
-      >
-        {display}
-      </div>
-      <div className="text-xs uppercase tracking-widest font-mono" style={{ color: "#3A3F42" }}>
-        {label}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NAV
-// ─────────────────────────────────────────────────────────────────────────────
-function Nav() {
-  const { scrollY } = useScroll();
-  const [solid, setSolid] = useState(false);
-
-  useEffect(() => {
-    const unsub = scrollY.on("change", v => setSolid(v > 60));
-    return unsub;
-  }, [scrollY]);
-
-  const navLinkStyle = useCallback(
-    (e: React.MouseEvent<HTMLAnchorElement | HTMLDivElement>) => {
-      (e.currentTarget as HTMLElement).style.color = "#D29A2D";
-    },
-    []
-  );
-  const navLinkLeave = useCallback(
-    (e: React.MouseEvent<HTMLAnchorElement | HTMLDivElement>) => {
-      (e.currentTarget as HTMLElement).style.color = "#595F61";
-    },
-    []
-  );
-
-  return (
-    <motion.nav
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4"
-      animate={{
-        background: solid ? "rgba(8,8,9,0.92)" : "transparent",
-        borderBottomColor: solid ? "rgba(255,255,255,0.05)" : "transparent",
-      }}
-      style={{
-        backdropFilter: solid ? "blur(20px)" : "none",
-        borderBottom: "1px solid transparent",
-      }}
-      transition={{ duration: 0.4 }}
-    >
-      <motion.div
-        className="font-display font-bold text-2xl tracking-tight"
-        style={{ color: "#D29A2D" }}
-        whileHover={{ scale: 1.04 }}
-      >
-        SilkLLM
-      </motion.div>
-
-      <div className="hidden md:flex items-center gap-8 text-sm" style={{ color: "#595F61" }}>
-        {[
-          ["#marketplace", "Marketplace"],
-          ["#modalities", "Modalities"],
-          ["#voice", "Voice"],
-          ["#pricing", "Pricing"],
-          ["/docs", "Docs"],
-        ].map(([href, label]) =>
-          (href as string).startsWith("/") ? (
-            <Link
-              key={label}
-              to={href as string}
-              className="transition-colors duration-200"
-              style={{ color: "inherit" }}
-              onMouseEnter={navLinkStyle}
-              onMouseLeave={navLinkLeave}
-            >
-              {label}
-            </Link>
-          ) : (
-            <a
-              key={label}
-              href={href as string}
-              className="transition-colors duration-200"
-              style={{ color: "inherit" }}
-              onMouseEnter={navLinkStyle}
-              onMouseLeave={navLinkLeave}
-            >
-              {label}
-            </a>
-          )
-        )}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Link
-          to="/login"
-          style={{ color: "#595F61", fontSize: "0.875rem", transition: "color 0.2s" }}
-          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = "#EDEFF0")}
-          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = "#595F61")}
-        >
-          Sign In
-        </Link>
-        <Link to="/login">
-          <motion.div
-            className="text-sm font-semibold px-5 py-2.5 rounded-xl"
-            style={{ background: "#D29A2D", color: "#0A0A0A" }}
-            whileHover={{ scale: 1.03, background: "#E0A830" }}
-            whileTap={{ scale: 0.97 }}
-          >
-            Get Started
-          </motion.div>
-        </Link>
-      </div>
-    </motion.nav>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HERO - throttled mouse tracking so it no longer feels like "dragging mountains"
-// ─────────────────────────────────────────────────────────────────────────────
 function Hero() {
-  const mouseRef = useRef({ x: 0.5, y: 0.5 });
-  const rafRef   = useRef<number>(0);
-  const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 });
-
-  const { scrollYProgress } = useScroll();
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.22], [1, 0]);
-  const heroY       = useTransform(scrollYProgress, [0, 0.22], [0, -70]);
-
-  // Throttled mouse handler - max one state update per animation frame
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      mouseRef.current = {
-        x: e.clientX / window.innerWidth,
-        y: e.clientY / window.innerHeight,
-      };
-      if (!rafRef.current) {
-        rafRef.current = requestAnimationFrame(() => {
-          setMouse({ ...mouseRef.current });
-          rafRef.current = 0;
-        });
-      }
-    };
-    window.addEventListener("mousemove", h);
-    return () => {
-      window.removeEventListener("mousemove", h);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      <NoiseMesh mouseX={mouse.x} mouseY={mouse.y} />
-
-      {/* vignette */}
+    <section className="relative overflow-hidden pt-28 sm:pt-36 pb-16 sm:pb-24">
+      {/* Soft brand wash, behind everything, never intercepting pointers. */}
       <div
-        className="absolute inset-0 pointer-events-none"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10"
         style={{
-          background: "radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, #080809 100%)",
+          background: "radial-gradient(60rem 32rem at 50% -8rem, rgb(var(--c-accent) / 0.16), transparent 70%)",
         }}
       />
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 px-safe">
+        <div className="grid lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-16 items-center">
+          <div className="min-w-0">
+            <Reveal>
+              <span className="inline-flex items-center gap-2 h-7 pl-2 pr-3 rounded-full border border-accent/25 bg-accent/[0.08] text-2xs font-medium text-accent-ink">
+                <Sparkles size={12} /> Nine providers, one balance
+              </span>
+            </Reveal>
 
-      <motion.div
-        style={{ opacity: heroOpacity, y: heroY }}
-        className="relative z-10 text-center px-6 max-w-5xl mx-auto pt-28"
-      >
-        {/* eyebrow pill */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full mb-10"
-          style={{
-            border: "1px solid rgba(210,154,45,0.2)",
-            background: "rgba(210,154,45,0.05)",
-            color: "#D29A2D",
-            fontSize: "0.75rem",
-            letterSpacing: "0.08em",
-          }}
-        >
-          <motion.span
-            className="w-1.5 h-1.5 rounded-full inline-block"
-            style={{ background: "#D29A2D" }}
-            animate={{ scale: [1, 1.5, 1], opacity: [0.7, 1, 0.7] }}
-            transition={{ duration: 1.8, repeat: Infinity }}
-          />
-          ONE KEY - EVERY MODEL - A LIVING MARKETPLACE
-        </motion.div>
-
-        {/* headline - word by word reveal */}
-        {[
-          { text: "One API.",      stroke: false, delay: 0.2 },
-          { text: "One Bill.",     stroke: true,  delay: 0.38 },
-          { text: "Infinite Models.", stroke: false, delay: 0.56 },
-        ].map((line, i) => (
-          <div key={i} className="overflow-hidden mb-3">
-            <motion.h1
-              initial={{ y: "110%", opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.85, delay: line.delay, ease: [0.16, 1, 0.3, 1] }}
-              className="font-display font-bold leading-[0.9] tracking-tight block"
-              style={{
-                fontSize: "clamp(3.5rem,10vw,8.5rem)",
-                color: line.stroke ? "transparent" : "#EDEFF0",
-                WebkitTextStroke: line.stroke ? "2px #D29A2D" : undefined,
-              }}
-            >
-              {line.text}
-            </motion.h1>
-          </div>
-        ))}
-
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.75 }}
-          className="text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed"
-          style={{ color: "#595F61" }}
-        >
-          One key across text, image, voice and video, with vision input and voice cloning. Bring your own
-          provider key and earn credits when others use it. Start free, and keep your chats on your own device.
-        </motion.p>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.9 }}
-          className="flex flex-col sm:flex-row gap-4 justify-center"
-        >
-          <Link to="/login">
-            <motion.div
-              className="inline-flex items-center gap-2 text-base font-semibold px-8 py-4 rounded-2xl"
-              style={{ background: "#D29A2D", color: "#0A0A0A" }}
-              whileHover={{
-                scale: 1.04,
-                background: "#E0A830",
-                boxShadow: "0 0 50px rgba(210,154,45,0.4)",
-              }}
-              whileTap={{ scale: 0.96 }}
-            >
-              Get Started Free <ArrowRight size={17} />
-            </motion.div>
-          </Link>
-          <Link to="/docs">
-            <motion.div
-              className="inline-flex items-center gap-2 text-base font-semibold px-8 py-4 rounded-2xl"
-              style={{ border: "1px solid #222426", color: "#595F61" }}
-              whileHover={{
-                borderColor: "#D29A2D44",
-                color: "#EDEFF0",
-                background: "rgba(210,154,45,0.04)",
-              }}
-            >
-              View Docs
-            </motion.div>
-          </Link>
-        </motion.div>
-      </motion.div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STATS ROW
-// ─────────────────────────────────────────────────────────────────────────────
-function StatsRow() {
-  return (
-    <section className="py-16 px-6" style={{ background: "#0A0A0A", borderTop: "1px solid #111314" }}>
-      <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-8">
-        <AnimatedStat value="99.9" label="Uptime (%)"         delay={0} />
-        <AnimatedStat value="50+"  label="Models"             delay={0.1} />
-        <AnimatedStat value="4"    label="Modalities"         delay={0.2} />
-        <AnimatedStat value="75%"  label="Earn on your keys"  delay={0.3} />
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HOW IT WORKS
-// ─────────────────────────────────────────────────────────────────────────────
-const STEPS = [
-  {
-    n: "01",
-    title: "Connect",
-    accent: "#D29A2D",
-    desc: "Create an account via Google or GitHub OAuth. Generate an API key. Add credits via Stripe or Paystack.",
-  },
-  {
-    n: "02",
-    title: "Generate",
-    accent: "#D0C51E",
-    desc: "Call /generate with any model. SilkLLM routes to the best provider and automatically falls back if needed.",
-  },
-  {
-    n: "03",
-    title: "Pay",
-    accent: "#B5B86B",
-    desc: "Credits deducted per request at provider cost + 10% markup. Transparent. Predictable. Never expires.",
-  },
-];
-
-function HowItWorks() {
-  return (
-    <section id="how-it-works" className="py-28 px-6" style={{ background: "#080809" }}>
-      <div className="max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="mb-20"
-        >
-          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>
-            Process
-          </p>
-          <h2
-            className="font-display font-bold leading-tight"
-            style={{
-              fontSize: "clamp(2.5rem,6vw,4.5rem)",
-              color: "#EDEFF0",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Three steps.
-            <br />
-            <span style={{ color: "#D29A2D" }}>Production-ready.</span>
-          </h2>
-        </motion.div>
-
-        <div className="grid md:grid-cols-3 gap-px" style={{ background: "#151618" }}>
-          {STEPS.map((s, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.8, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
-              className="group p-10 relative overflow-hidden"
-              style={{ background: "#0A0A0A" }}
-              whileHover={{ background: "#0D0E0F" }}
-            >
-              <motion.div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: `linear-gradient(135deg, ${s.accent}08, transparent)`,
-                  opacity: 0,
-                  transition: "opacity 0.4s",
-                }}
-                whileHover={{ opacity: 1 }}
-              />
-              <div
-                className="font-display text-7xl font-bold mb-6 leading-none"
-                style={{ color: "#181A1B", letterSpacing: "-0.04em" }}
-              >
-                {s.n}
-              </div>
-              <div className="text-xl font-display font-semibold mb-3" style={{ color: "#EDEFF0" }}>
-                {s.title}
-              </div>
-              <div className="text-sm leading-relaxed" style={{ color: "#595F61" }}>
-                {s.desc}
-              </div>
-              <motion.div
-                className="absolute bottom-0 left-0 h-0.5"
-                style={{ background: s.accent, width: 0 }}
-                whileInView={{ width: "100%" }}
-                viewport={{ once: true }}
-                transition={{ duration: 1.2, delay: 0.5 + i * 0.15, ease: [0.16, 1, 0.3, 1] }}
-              />
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PROVIDERS
-// ─────────────────────────────────────────────────────────────────────────────
-function Providers() {
-  return (
-    <section id="providers" className="py-28 px-6" style={{ background: "#0A0A0A" }}>
-      <div className="max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="mb-16"
-        >
-          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>
-            Providers
-          </p>
-          <h2
-            className="font-display font-bold"
-            style={{
-              fontSize: "clamp(2.5rem,6vw,4.5rem)",
-              color: "#EDEFF0",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Every network.
-            <br />
-            <span style={{ color: "#D29A2D" }}>One key.</span>
-          </h2>
-          <p className="text-base leading-relaxed mt-5 max-w-xl" style={{ color: "#595F61" }}>
-            Frontier chat models, free-tier backends, and a full voice stack, all behind one key.
-            It keeps working as the catalogue grows.
-          </p>
-        </motion.div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {PROVIDERS.map((p, i) => (
-            <ProviderCard key={p.name} {...p} index={i} />
-          ))}
-          {/* Growth card: signals we go beyond the current set */}
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
-            transition={{ duration: 0.7, delay: PROVIDERS.length * 0.09, ease: [0.16, 1, 0.3, 1] }}
-            className="relative rounded-2xl px-6 py-5 flex flex-col justify-center items-start overflow-hidden"
-            style={{ background: "#0F1011", border: "1px dashed #2A2C2E" }}
-          >
-            <motion.div
-              className="absolute inset-0 pointer-events-none"
-              animate={{ opacity: [0.15, 0.4, 0.15] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              style={{ background: "radial-gradient(circle at 30% 30%, rgba(210,154,45,0.14), transparent 70%)" }}
-            />
-            <div className="relative font-display font-semibold text-base" style={{ color: "#D29A2D" }}>
-              and more
-            </div>
-            <div className="relative text-xs font-mono mt-1" style={{ color: "#595F61" }}>
-              added continuously
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PRICING
-// ─────────────────────────────────────────────────────────────────────────────
-const PRICES = [
-  { label: "GPT-4o",            price: "$0.0055/1K",   color: "#74aa9c" },
-  { label: "Claude 3.5 Sonnet", price: "$0.0033/1K",   color: "#D97757" },
-  { label: "Gemini 1.5 Flash",  price: "$0.000083/1K", color: "#4285f4" },
-  { label: "DeepSeek V3",       price: "$0.00028/1K",  color: "#5BC4F5" },
-  { label: "Grok 3 Mini",       price: "$0.00033/1K",  color: "#D8D8D8" },
-];
-
-function Pricing() {
-  return (
-    <section id="pricing" className="py-28 px-6" style={{ background: "#080809" }}>
-      <div className="max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="mb-16"
-        >
-          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>
-            Pricing
-          </p>
-          <h2
-            className="font-display font-bold"
-            style={{
-              fontSize: "clamp(2.5rem,6vw,4.5rem)",
-              color: "#EDEFF0",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            Provider cost
-            <br />
-            <span style={{ color: "#D29A2D" }}>+ 10%. Full stop.</span>
-          </h2>
-        </motion.div>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="rounded-2xl p-10 flex flex-col justify-between"
-            style={{
-              background: "#0D0E0F",
-              border: "1px solid #1A1C1E",
-              boxShadow: "inset 0 1px 0 rgba(210,154,45,0.05)",
-            }}
-          >
-            <div>
-              <div
-                className="font-display font-bold mb-2"
-                style={{
-                  fontSize: "5.5rem",
-                  lineHeight: 1,
-                  color: "#D29A2D",
-                  letterSpacing: "-0.04em",
-                }}
-              >
-                +10%
-              </div>
-              <div className="text-sm leading-relaxed mb-6" style={{ color: "#595F61" }}>
-                No subscriptions. No seats. No hidden fees.
+            <Reveal delay={0.06}>
+              <h1 className="font-display font-bold tracking-tight text-ink mt-5 text-[2.5rem] leading-[1.05] sm:text-6xl sm:leading-[1.02]">
+                One key for
                 <br />
-                USD via Stripe · NGN via Paystack.
-                <br />
-                Credits never expire.
-              </div>
-            </div>
-            <Link to="/login">
-              <motion.div
-                className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl w-fit"
-                style={{ background: "#D29A2D", color: "#0A0A0A" }}
-                whileHover={{ scale: 1.03, background: "#E0A830" }}
-                whileTap={{ scale: 0.97 }}
-              >
-                Add Credits <ArrowRight size={15} />
-              </motion.div>
-            </Link>
-          </motion.div>
+                every AI model
+              </h1>
+            </Reveal>
 
-          <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8, delay: 0.1 }}
-            className="rounded-2xl overflow-hidden"
-            style={{ background: "#0D0E0F", border: "1px solid #1A1C1E" }}
-          >
-            <div
-              className="px-6 py-4 border-b text-xs font-mono uppercase tracking-widest"
-              style={{ borderColor: "#1A1C1E", color: "#3A3F42" }}
-            >
-              Sample input prices · per 1K tokens
-            </div>
-            {PRICES.map((item, i) => (
-              <motion.div
-                key={item.label}
-                initial={{ opacity: 0, x: 16 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.15 + i * 0.07 }}
-                className="flex items-center justify-between px-6 py-4"
-                style={{ borderBottom: i < PRICES.length - 1 ? "1px solid #111314" : "none" }}
-                whileHover={{ background: "#111314" }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full" style={{ background: item.color }} />
-                  <span className="text-sm" style={{ color: "#C2C9CC" }}>
-                    {item.label}
+            <Reveal delay={0.12}>
+              <p className="text-base sm:text-lg text-ink-2 mt-5 leading-relaxed max-w-xl">
+                Text, image, audio and video from OpenAI, Anthropic, Google, DeepSeek, xAI and more,
+                through a single endpoint and a single prepaid balance. Bring your own provider key
+                and earn credits when others use it.
+              </p>
+            </Reveal>
+
+            <Reveal delay={0.18}>
+              <div className="flex flex-wrap gap-3 mt-8">
+                <Link to="/login" className="btn-primary h-11 px-5">
+                  Start free <ArrowRight size={16} />
+                </Link>
+                <Link to="/docs" className="btn-secondary h-11 px-5">Read the docs</Link>
+              </div>
+            </Reveal>
+
+            <Reveal delay={0.24}>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-7 text-xs text-ink-3">
+                {["No card to start", "Credits never expire", "Chats stay on your device"].map((t) => (
+                  <span key={t} className="inline-flex items-center gap-1.5">
+                    <Check size={13} className="text-success shrink-0" /> {t}
                   </span>
-                </div>
-                <span className="font-mono text-sm" style={{ color: "#D29A2D" }}>
-                  {item.price}
-                </span>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DEV EXPERIENCE
-// ─────────────────────────────────────────────────────────────────────────────
-function DevExperience() {
-  return (
-    <section className="py-28 px-6" style={{ background: "#0A0A0A" }}>
-      <div className="max-w-5xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-start">
-          <motion.div
-            className="min-w-0"
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-          >
-            <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>
-              DX
-            </p>
-            <h2
-              className="font-display font-bold mb-6 leading-tight"
-              style={{
-                fontSize: "clamp(2rem,5vw,3.5rem)",
-                color: "#EDEFF0",
-                letterSpacing: "-0.03em",
-              }}
-            >
-              Integrate
-              <br />
-              <span style={{ color: "#D29A2D" }}>in minutes.</span>
-            </h2>
-            <p className="text-base leading-relaxed mb-8" style={{ color: "#595F61" }}>
-              <code
-                className="font-mono text-sm px-2 py-0.5 rounded"
-                style={{
-                  background: "#141617",
-                  color: "#D29A2D",
-                  border: "1px solid #1E2022",
-                }}
-              >
-                pip install silkllm
-              </code>{" "}
-              and you're live. Streaming support, automatic fallbacks, and per-request cost tracking out of the
-              box.
-            </p>
-            <div className="space-y-3 mb-8">
-              {[
-                "Streaming via SSE",
-                "Automatic provider fallbacks",
-                "Per-request cost in every response",
-                "Python & JavaScript SDKs",
-              ].map((f, i) => (
-                <motion.div
-                  key={f}
-                  initial={{ opacity: 0, x: -16 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.3 + i * 0.08 }}
-                  className="flex items-center gap-3 text-sm"
-                  style={{ color: "#7A8285" }}
-                >
-                  <motion.div
-                    className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center"
-                    style={{
-                      background: "rgba(210,154,45,0.1)",
-                      border: "1px solid rgba(210,154,45,0.2)",
-                    }}
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, delay: i * 0.4, repeat: Infinity }}
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#D29A2D" }} />
-                  </motion.div>
-                  {f}
-                </motion.div>
-              ))}
-            </div>
-            <Link to="/login">
-              <motion.div
-                className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl w-fit"
-                style={{ border: "1px solid #D29A2D33", color: "#D29A2D" }}
-                whileHover={{
-                  background: "rgba(210,154,45,0.07)",
-                  borderColor: "#D29A2D66",
-                }}
-              >
-                Start Building <ArrowRight size={15} />
-              </motion.div>
-            </Link>
-          </motion.div>
-
-          <motion.div
-            className="min-w-0"
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <TypewriterCode />
-          </motion.div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CTA
-// ─────────────────────────────────────────────────────────────────────────────
-function CTA() {
-  return (
-    <section className="py-28 px-6 relative overflow-hidden" style={{ background: "#080809" }}>
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        animate={{ opacity: [0.35, 0.75, 0.35] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        style={{
-          background:
-            "radial-gradient(ellipse 50% 40% at 50% 50%, rgba(210,154,45,0.07), transparent)",
-        }}
-      />
-      <div className="relative max-w-3xl mx-auto text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <h2
-            className="font-display font-bold mb-6 leading-tight"
-            style={{
-              fontSize: "clamp(2.5rem,7vw,5rem)",
-              color: "#EDEFF0",
-              letterSpacing: "-0.04em",
-            }}
-          >
-            Ready to ship
-            <br />
-            <span style={{ color: "#D29A2D" }}>faster?</span>
-          </h2>
-          <p className="text-lg mb-12" style={{ color: "#595F61" }}>
-            One API key. Every model. Start free, scale as you grow.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/login">
-              <motion.div
-                className="inline-flex items-center gap-2 text-base font-semibold px-10 py-4 rounded-2xl"
-                style={{ background: "#D29A2D", color: "#0A0A0A" }}
-                whileHover={{
-                  scale: 1.04,
-                  background: "#E0A830",
-                  boxShadow: "0 0 60px rgba(210,154,45,0.4)",
-                }}
-                whileTap={{ scale: 0.96 }}
-              >
-                Get Started Free <ArrowRight size={17} />
-              </motion.div>
-            </Link>
-            <Link to="/docs">
-              <motion.div
-                className="inline-flex items-center gap-2 text-base font-semibold px-10 py-4 rounded-2xl"
-                style={{ border: "1px solid #1E2022", color: "#595F61" }}
-                whileHover={{ borderColor: "#D29A2D44", color: "#EDEFF0" }}
-              >
-                Read the Docs
-              </motion.div>
-            </Link>
+                ))}
+              </div>
+            </Reveal>
           </div>
-        </motion.div>
+
+          <Reveal delay={0.1} className="min-w-0">
+            <CodePanel />
+          </Reveal>
+        </div>
       </div>
     </section>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FOOTER
-// ─────────────────────────────────────────────────────────────────────────────
-function Footer() {
-  return (
-    <footer
-      className="px-8 py-10"
-      style={{ borderTop: "1px solid #111314", background: "#0A0A0A" }}
-    >
-      <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-        <div
-          className="font-display font-bold text-xl tracking-tight"
-          style={{ color: "#D29A2D" }}
-        >
-          SilkLLM
-        </div>
-        <div className="flex gap-8 text-sm" style={{ color: "#3A3F42" }}>
-          {[
-            ["Docs", "/docs"],
-            ["Dashboard", "/login"],
-            ["Pricing", "#pricing"],
-            ["Providers", "#providers"],
-          ].map(([l, h]) =>
-            (h as string).startsWith("/") ? (
-              <Link
-                key={l}
-                to={h as string}
-                style={{ color: "inherit", transition: "color 0.2s" }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = "#D29A2D")}
-                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = "#3A3F42")}
-              >
-                {l}
-              </Link>
-            ) : (
-              <a
-                key={l}
-                href={h as string}
-                style={{ color: "inherit", transition: "color 0.2s" }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = "#D29A2D")}
-                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = "#3A3F42")}
-              >
-                {l}
-              </a>
-            )
-          )}
-        </div>
-        <div className="text-sm" style={{ color: "#2C2F31" }}>
-          © {new Date().getFullYear()} SilkLLM
-        </div>
-      </div>
-    </footer>
-  );
-}
+// ── Provider marquee ────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SILK THREAD - hand-crafted animated SVG ribbon (the brand signature)
-// ─────────────────────────────────────────────────────────────────────────────
-function SilkThread({ height = 120 }: { height?: number }) {
+/**
+ * A continuous strip of provider names. The list is rendered twice and the
+ * track travels exactly half its width, so the loop has no visible seam.
+ */
+function Marquee() {
   return (
-    <div className="relative w-full overflow-hidden" style={{ height, background: "#080809" }} aria-hidden>
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 120" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="silkGrad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#D29A2D" stopOpacity="0" />
-            <stop offset="50%" stopColor="#D29A2D" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#B5B86B" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[0, 1, 2].map((i) => (
-          <motion.path
-            key={i}
-            d={`M0 ${60 + i * 6} C 300 ${20 + i * 10}, 500 ${100 - i * 8}, 700 ${60 + i * 4} S 1100 ${30 + i * 6}, 1200 ${60 - i * 4}`}
-            fill="none"
-            stroke="url(#silkGrad)"
-            strokeWidth={1.5}
-            strokeDasharray="10 16"
-            animate={{ strokeDashoffset: [0, -260] }}
-            transition={{ duration: 6 + i * 2, repeat: Infinity, ease: "linear" }}
-            style={{ opacity: 0.5 - i * 0.13 }}
-          />
+    <div className="border-y border-line bg-sunken py-4 overflow-hidden">
+      <div className="flex gap-8 sm:gap-12 w-max animate-marquee hover:[animation-play-state:paused]">
+        {[...PROVIDERS, ...PROVIDERS].map((p, i) => (
+          <span key={i} className="inline-flex items-center gap-2.5 shrink-0">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+            <span className="text-sm font-medium text-ink-2 whitespace-nowrap">{p.name}</span>
+          </span>
         ))}
-      </svg>
+      </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EARN LOOP - the BYOK marketplace, told as a flow
-// ─────────────────────────────────────────────────────────────────────────────
-const EARN_STEPS = [
-  { icon: <Coins size={20} />,       title: "Deposit a key",  desc: "Add your own provider key as public." },
-  { icon: <Sparkles size={20} />,    title: "Others use it",  desc: "Our engine serves other users with it." },
-  { icon: <ArrowRight size={20} />,  title: "You earn 75%",   desc: "Credited to you as SilkLLM balance." },
-  { icon: <ShieldCheck size={20} />, title: "Spend anywhere", desc: "Use credits on any model, any provider." },
-];
-
-function EarnLoop() {
-  return (
-    <section id="marketplace" className="py-28 px-6" style={{ background: "#0A0A0A" }}>
-      <div className="max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }} transition={{ duration: 0.8 }} className="mb-16"
-        >
-          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Marketplace</p>
-          <h2 className="font-display font-bold leading-tight"
-            style={{ fontSize: "clamp(2.5rem,6vw,4.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
-            Bring your own key.
-            <br /><span style={{ color: "#D29A2D" }}>Earn while you build.</span>
-          </h2>
-          <p className="text-base leading-relaxed mt-5 max-w-xl" style={{ color: "#595F61" }}>
-            Share a key and our engine quietly uses it to serve others. You earn 75% of the provider cost as
-            credits. Public keys are never shown to anyone, and a working marketplace key always comes before ours.
-          </p>
-        </motion.div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {EARN_STEPS.map((s, i) => (
-            <motion.div
-              key={s.title}
-              initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ duration: 0.6, delay: i * 0.1, ease: [0.16, 1, 0.3, 1] }}
-              whileHover={{ y: -5 }}
-              className="relative rounded-2xl px-5 py-6"
-              style={{ background: "#0F1011", border: "1px solid #1E2022" }}
-            >
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4"
-                style={{ background: "rgba(210,154,45,0.1)", color: "#D29A2D", border: "1px solid rgba(210,154,45,0.2)" }}>
-                {s.icon}
-              </div>
-              <div className="font-display font-semibold text-sm mb-1" style={{ color: "#EDEFF0" }}>{s.title}</div>
-              <div className="text-xs leading-relaxed" style={{ color: "#595F61" }}>{s.desc}</div>
-              <div className="absolute top-4 right-4 font-mono text-xs" style={{ color: "#22242699" }}>{`0${i + 1}`}</div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MODALITIES - text / image / audio / video
-// ─────────────────────────────────────────────────────────────────────────────
-const MODALITIES = [
-  { icon: <Type size={22} />,       name: "Text",  sub: "Chat, reasoning, vision input", color: "#D29A2D" },
-  { icon: <ImageIcon size={22} />,  name: "Image", sub: "DALL-E, Gemini, and more",      color: "#D0C51E" },
-  { icon: <AudioLines size={22} />, name: "Voice", sub: "TTS, cloning, voice change",     color: "#B5B86B" },
-  { icon: <Video size={22} />,      name: "Video", sub: "Where providers support it",     color: "#FAC059" },
-];
+// ── Sections ────────────────────────────────────────────────────────────────
 
 function Modalities() {
   return (
-    <section id="modalities" className="py-28 px-6" style={{ background: "#080809" }}>
-      <div className="max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }} transition={{ duration: 0.8 }} className="mb-16"
-        >
-          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Modalities</p>
-          <h2 className="font-display font-bold" style={{ fontSize: "clamp(2.5rem,6vw,4.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
-            Every modality.
-            <br /><span style={{ color: "#D29A2D" }}>One gateway.</span>
-          </h2>
-        </motion.div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {MODALITIES.map((m, i) => (
-            <motion.div
-              key={m.name} data-magnetic
-              initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ duration: 0.6, delay: i * 0.09, ease: [0.16, 1, 0.3, 1] }}
-              whileHover={{ y: -4 }}
-              className="rounded-2xl px-6 py-7" style={{ background: "#0F1011", border: "1px solid #1E2022" }}
-            >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
-                style={{ background: `${m.color}18`, color: m.color, border: `1px solid ${m.color}33` }}>
+    <Section id="modalities">
+      <SectionHead
+        eyebrow="Every modality"
+        title="Not just chat"
+        sub="The same key and the same balance cover generation across every medium the providers support."
+      />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-10">
+        {MODALITIES.map((m, i) => (
+          <Reveal key={m.name} delay={i * 0.06}>
+            <div className="card card-pad h-full hover:border-line-strong transition-colors">
+              <span className="w-10 h-10 rounded-xl bg-accent/10 text-accent-ink flex items-center justify-center">
                 {m.icon}
-              </div>
-              <div className="font-display font-semibold text-lg mb-1" style={{ color: "#EDEFF0" }}>{m.name}</div>
-              <div className="text-xs font-mono" style={{ color: "#595F61" }}>{m.sub}</div>
-            </motion.div>
-          ))}
+              </span>
+              <p className="text-base font-semibold text-ink mt-4">{m.name}</p>
+              <p className="text-sm text-ink-2 mt-1.5 leading-relaxed">{m.sub}</p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function Marketplace() {
+  return (
+    <Section id="marketplace" className="bg-sunken border-y border-line">
+      <SectionHead
+        eyebrow="Marketplace"
+        title="Your idle API key can pay for itself"
+        sub="Deposit a provider key and mark it public. When the router serves someone else through it, you earn 75% of the provider cost back as credits you can spend on any model."
+      />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-10">
+        {EARN_STEPS.map((s, i) => (
+          <Reveal key={s.title} delay={i * 0.06}>
+            <div className="card card-pad h-full relative">
+              <span className="absolute top-5 right-5 text-2xs font-mono text-ink-3">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="w-9 h-9 rounded-lg bg-accent/10 text-accent-ink flex items-center justify-center">
+                {s.icon}
+              </span>
+              <p className="text-sm font-semibold text-ink mt-4">{s.title}</p>
+              <p className="text-sm text-ink-2 mt-1.5 leading-relaxed">{s.desc}</p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+      <Reveal delay={0.2}>
+        <div className="mt-8 rounded-xl border border-accent/25 bg-accent/[0.07] px-5 py-4 flex items-start gap-3">
+          <ShieldCheck size={17} className="text-accent-ink shrink-0 mt-0.5" />
+          <p className="text-sm text-ink-2 leading-relaxed">
+            A public key is only ever used by the routing engine. It is never shown to another user,
+            never returned by the API, and you can revoke it at any time.
+          </p>
         </div>
-      </div>
-    </section>
+      </Reveal>
+    </Section>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VOICE - a dedicated, animated showcase for the voice suite
-// ─────────────────────────────────────────────────────────────────────────────
-const VOICE_NAMES = ["Rachel", "Antoni", "Bella", "Domi", "Josh", "Your voice"];
-const VOICE_FEATURES = [
-  { icon: <AudioLines size={15} />, label: "Text to speech" },
-  { icon: <Mic size={15} />,        label: "Voice changer" },
-  { icon: <Wand2 size={15} />,      label: "Instant cloning" },
-  { icon: <Sparkles size={15} />,   label: "Fine controls" },
-];
-
-// A living equalizer. Bars pulse on an index-derived rhythm (no randomness so it
-// stays deterministic), giving the panel a sense of live audio.
-function VoiceWave({ bars = 40, active = true }: { bars?: number; active?: boolean }) {
+function HowItWorks() {
   return (
-    <div className="flex items-center gap-[3px] h-16 w-full">
-      {Array.from({ length: bars }).map((_, i) => {
-        const base = 18 + ((i * 7) % 40);
-        const peak = 55 + ((i * 13) % 45);
-        return (
-          <motion.span
-            key={i}
-            className="flex-1 rounded-full"
-            style={{ background: "#D29A2D", minWidth: 2, opacity: 0.5 + ((i % 6) / 12) }}
-            animate={active ? { height: [`${base}%`, `${peak}%`, `${base}%`] } : { height: "20%" }}
-            transition={{ duration: 0.9 + ((i % 5) * 0.18), repeat: Infinity, ease: "easeInOut", delay: (i % 9) * 0.06 }}
-          />
-        );
-      })}
-    </div>
+    <Section id="how">
+      <SectionHead eyebrow="How it works" title="Three steps, then you are running" />
+      <div className="grid md:grid-cols-3 gap-4 mt-10">
+        {STEPS.map((s, i) => (
+          <Reveal key={s.n} delay={i * 0.08}>
+            <div className="card card-pad h-full">
+              <span className="font-display text-3xl font-bold text-accent/30">{s.n}</span>
+              <p className="text-lg font-semibold text-ink mt-2">{s.title}</p>
+              <p className="text-sm text-ink-2 mt-2 leading-relaxed">{s.desc}</p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+    </Section>
   );
 }
 
-function VoiceSlider({ label, value, delay }: { label: string; value: number; delay: number }) {
+function Providers() {
   return (
-    <div>
-      <div className="flex justify-between text-[10px] font-mono mb-1" style={{ color: "#595F61" }}>
-        <span>{label}</span><span>{value.toFixed(2)}</span>
+    <Section id="providers" className="bg-sunken border-y border-line">
+      <SectionHead
+        eyebrow="Providers"
+        title="Nine providers, not nine integrations"
+        sub="Swap models by changing one string. Routing, fallback, billing and rate limits are handled for you."
+      />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-10">
+        {PROVIDERS.map((p, i) => (
+          <Reveal key={p.name} delay={(i % 3) * 0.06}>
+            <div className="card card-pad h-full flex items-center gap-3.5 hover:border-line-strong transition-colors">
+              <span
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
+                style={{ background: `${p.color}1f`, color: p.color, border: `1px solid ${p.color}38` }}
+              >
+                {p.name.slice(0, 2)}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink truncate">{p.name}</span>
+                <span className="block text-xs text-ink-3 truncate">{p.sub}</span>
+              </span>
+            </div>
+          </Reveal>
+        ))}
       </div>
-      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1A1C1E" }}>
-        <motion.div
-          className="h-full rounded-full"
-          style={{ background: "#D29A2D" }}
-          initial={{ width: 0 }}
-          whileInView={{ width: `${value * 100}%` }}
-          viewport={{ once: true }}
-          transition={{ duration: 1, delay, ease: [0.16, 1, 0.3, 1] }}
-        />
-      </div>
-    </div>
+    </Section>
   );
 }
 
 function Voice() {
-  const [vi, setVi] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setVi((v) => (v + 1) % VOICE_NAMES.length), 2200);
-    return () => clearInterval(id);
-  }, []);
-
   return (
-    <section id="voice" className="relative py-28 px-6 overflow-hidden" style={{ background: "#0A0A0A" }}>
-      {/* Ambient glow */}
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        animate={{ opacity: [0.25, 0.5, 0.25] }}
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-        style={{ background: "radial-gradient(ellipse 50% 45% at 70% 40%, rgba(210,154,45,0.08), transparent)" }}
+    <Section id="voice">
+      <div className="grid lg:grid-cols-2 gap-12 items-center">
+        <div className="min-w-0">
+          <SectionHead
+            eyebrow="Voice studio"
+            title="Speech that does more than read aloud"
+            sub="Generate speech from text, convert a recording into another speaker, or clone a voice from a minute of audio. Same key, same balance."
+          />
+          <Reveal delay={0.12}>
+            <div className="flex flex-wrap gap-2 mt-7">
+              {VOICE_FEATURES.map((f) => (
+                <span
+                  key={f.label}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-line bg-surface text-xs font-medium text-ink-2"
+                >
+                  <span className="text-accent-ink">{f.icon}</span> {f.label}
+                </span>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+
+        <Reveal delay={0.1} className="min-w-0">
+          <div className="card card-pad">
+            <div className="flex items-center gap-2 mb-5">
+              <AudioLines size={16} className="text-accent-ink" />
+              <span className="text-sm font-medium text-ink">Live output</span>
+              <Badge tone="success">Streaming</Badge>
+            </div>
+            {/* A deterministic equalizer: bar height derives from its index, so it
+                animates without randomness and renders identically every time. */}
+            <div className="flex items-end justify-between gap-[3px] h-24" aria-hidden="true">
+              {Array.from({ length: 44 }).map((_, i) => {
+                const base = 22 + Math.abs(Math.sin(i * 0.7)) * 62;
+                return (
+                  <motion.span
+                    key={i}
+                    className="flex-1 rounded-full bg-accent/70 min-w-[2px]"
+                    initial={{ height: "18%" }}
+                    animate={{ height: [`${base * 0.35}%`, `${base}%`, `${base * 0.5}%`] }}
+                    transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.035, ease: "easeInOut" }}
+                  />
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-line">
+              {[["Stability", "0.50"], ["Similarity", "0.75"], ["Style", "0.00"]].map(([k, v]) => (
+                <div key={k}>
+                  <p className="text-2xs text-ink-3 uppercase tracking-wide">{k}</p>
+                  <p className="text-sm font-medium text-ink num mt-0.5">{v}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+      </div>
+    </Section>
+  );
+}
+
+function Pricing() {
+  return (
+    <Section id="pricing" className="bg-sunken border-y border-line">
+      <SectionHead
+        eyebrow="Pricing"
+        title="Provider cost, plus 10%"
+        sub="No subscription, no seats, no minimum. You pay what the provider charges plus a flat markup, and only for what you actually use."
+        center
       />
-      <div className="relative max-w-5xl mx-auto grid md:grid-cols-2 gap-16 items-center">
-        {/* Copy */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }} transition={{ duration: 0.8 }} className="min-w-0"
-        >
-          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Voice studio</p>
-          <h2 className="font-display font-bold mb-6 leading-tight"
-            style={{ fontSize: "clamp(2rem,5vw,3.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
-            Any voice.
-            <br /><span style={{ color: "#D29A2D" }}>On demand.</span>
-          </h2>
-          <p className="text-base leading-relaxed mb-8" style={{ color: "#595F61" }}>
-            Turn text into lifelike speech with a chosen speaker, convert any clip into another voice, or clone
-            your own from a few samples, then dial in stability, similarity, and style. The same key, the same bill.
-          </p>
-          <div className="flex flex-wrap gap-2.5 mb-8">
-            {VOICE_FEATURES.map((f, i) => (
-              <motion.span
-                key={f.label} data-magnetic
-                initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ delay: 0.2 + i * 0.08 }}
-                className="inline-flex items-center gap-2 text-sm px-3.5 py-2 rounded-xl"
-                style={{ background: "#111314", color: "#9AA0A3", border: "1px solid #1E2022" }}
-              >
-                <span style={{ color: "#D29A2D" }}>{f.icon}</span> {f.label}
-              </motion.span>
-            ))}
-          </div>
-          <Link to="/docs">
-            <motion.div
-              className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl w-fit"
-              style={{ border: "1px solid rgba(210,154,45,0.35)", color: "#D29A2D" }}
-              whileHover={{ background: "rgba(210,154,45,0.07)", borderColor: "rgba(210,154,45,0.6)" }}
-            >
-              Explore voice <ArrowRight size={15} />
-            </motion.div>
-          </Link>
-        </motion.div>
 
-        {/* Studio panel */}
-        <motion.div
-          initial={{ opacity: 0, y: 30, scale: 0.97 }} whileInView={{ opacity: 1, y: 0, scale: 1 }}
-          viewport={{ once: true }} transition={{ duration: 0.8, delay: 0.15 }}
-          className="min-w-0 rounded-2xl p-5 sm:p-6"
-          style={{ background: "#0D0E0F", border: "1px solid #1E2022", boxShadow: "0 32px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(210,154,45,0.06)" }}
-        >
-          {/* Header: cycling speaker */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "rgba(210,154,45,0.12)", border: "1px solid rgba(210,154,45,0.3)" }}>
-              <AudioLines size={18} style={{ color: "#D29A2D" }} />
+      <div className="grid lg:grid-cols-[1fr_1.1fr] gap-6 mt-10 items-start">
+        <Reveal className="min-w-0">
+          <div className="card overflow-hidden">
+            <div className="px-5 sm:px-6 py-4 border-b border-line">
+              <p className="text-sm font-semibold text-ink">Sample rates</p>
+              <p className="text-xs text-ink-3 mt-0.5">Per 1K tokens, blended input and output.</p>
             </div>
-            <div className="min-w-0">
-              <div className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "#3A3F42" }}>Speaker</div>
-              <div className="h-6 overflow-hidden">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={vi}
-                    initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
-                    transition={{ duration: 0.35 }}
-                    className="font-display font-semibold text-lg leading-6"
-                    style={{ color: vi === VOICE_NAMES.length - 1 ? "#D29A2D" : "#EDEFF0" }}
-                  >
-                    {VOICE_NAMES[vi]}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            </div>
-            <div className="ml-auto flex items-center gap-1.5 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#28ca41" }} />
-              <span className="text-[10px] font-mono" style={{ color: "#28ca41", opacity: 0.8 }}>live</span>
+            <ul className="divide-y divide-line">
+              {PRICES.map((p) => (
+                <li key={p.label} className="flex items-center gap-3 px-5 sm:px-6 py-3.5">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
+                  <span className="text-sm text-ink flex-1 min-w-0 truncate">{p.label}</span>
+                  <span className="text-sm font-medium text-ink num shrink-0">{p.price}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="px-5 sm:px-6 py-3 border-t border-line bg-sunken">
+              <p className="text-xs text-ink-3">
+                Free-tier models from Groq, Cerebras and OpenRouter cost nothing at all.
+              </p>
             </div>
           </div>
+        </Reveal>
 
-          {/* Waveform + play */}
-          <div className="flex items-center gap-3 rounded-xl px-4 py-3 mb-5" style={{ background: "#0A0B0C", border: "1px solid #1A1C1E" }}>
-            <motion.div
-              className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "#D29A2D", color: "#0A0A0A" }}
-              whileHover={{ scale: 1.08 }}
-              animate={{ boxShadow: ["0 0 0 0 rgba(210,154,45,0.4)", "0 0 0 10px rgba(210,154,45,0)"] }}
-              transition={{ duration: 1.8, repeat: Infinity }}
-            >
-              <Play size={15} className="ml-0.5" />
-            </motion.div>
-            <VoiceWave />
-          </div>
-
-          {/* Voice settings */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <VoiceSlider label="Stability" value={0.5} delay={0.2} />
-            <VoiceSlider label="Similarity" value={0.75} delay={0.32} />
-            <VoiceSlider label="Style" value={0.35} delay={0.44} />
-          </div>
-
-          {/* Pipeline: your clip -> any voice, and cloning */}
-          <div className="rounded-xl p-4" style={{ background: "#0A0B0C", border: "1px solid #1A1C1E" }}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-col items-center gap-1.5 text-center flex-1">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "#141617", border: "1px solid #1E2022" }}>
-                  <Mic size={16} style={{ color: "#9AA0A3" }} />
-                </div>
-                <span className="text-[10px] font-mono" style={{ color: "#595F61" }}>Your clip</span>
-              </div>
-              <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 1.4, repeat: Infinity }}>
-                <ArrowRight size={16} style={{ color: "#D29A2D" }} />
-              </motion.div>
-              <div className="flex flex-col items-center gap-1.5 text-center flex-1">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "rgba(210,154,45,0.12)", border: "1px solid rgba(210,154,45,0.3)" }}>
-                  <Wand2 size={16} style={{ color: "#D29A2D" }} />
-                </div>
-                <span className="text-[10px] font-mono" style={{ color: "#595F61" }}>Convert</span>
-              </div>
-              <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 1.4, repeat: Infinity, delay: 0.3 }}>
-                <ArrowRight size={16} style={{ color: "#D29A2D" }} />
-              </motion.div>
-              <div className="flex flex-col items-center gap-1.5 text-center flex-1">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "#141617", border: "1px solid #1E2022" }}>
-                  <Download size={16} style={{ color: "#9AA0A3" }} />
-                </div>
-                <span className="text-[10px] font-mono" style={{ color: "#595F61" }}>Any voice</span>
-              </div>
+        <Reveal delay={0.08} className="min-w-0">
+          <div className="card card-pad relative overflow-hidden">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none opacity-60"
+              style={{ background: "radial-gradient(120% 100% at 100% 0%, rgb(var(--c-accent) / 0.12), transparent 60%)" }}
+            />
+            <div className="relative">
+              <Badge tone="brand">Start free</Badge>
+              <p className="font-display text-4xl font-bold text-ink mt-4">$0</p>
+              <p className="text-sm text-ink-2 mt-1.5">
+                A trial allowance every day while you evaluate. No card required.
+              </p>
+              <ul className="space-y-2.5 mt-6">
+                {[
+                  "Every provider and every modality",
+                  "Free-tier models at no cost, ever",
+                  "Automatic fallback between providers",
+                  "Earn credits by sharing a provider key",
+                  "Chats stored on your device, not ours",
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2.5 text-sm text-ink-2">
+                    <Check size={15} className="text-success shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link to="/login" className="btn-primary w-full mt-7">
+                Create your account <ArrowRight size={16} />
+              </Link>
             </div>
           </div>
-        </motion.div>
+        </Reveal>
       </div>
-    </section>
+    </Section>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OWN YOUR DATA - local-first chat + free trial
-// ─────────────────────────────────────────────────────────────────────────────
-function OwnData() {
+function Guarantees() {
   return (
-    <section className="py-28 px-6" style={{ background: "#0A0A0A" }}>
-      <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-16 items-center">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }} transition={{ duration: 0.8 }}
-        >
-          <p className="text-xs font-mono uppercase tracking-widest mb-4" style={{ color: "#3A3F42" }}>Own your data</p>
-          <h2 className="font-display font-bold mb-6 leading-tight"
-            style={{ fontSize: "clamp(2rem,5vw,3.5rem)", color: "#EDEFF0", letterSpacing: "-0.03em" }}>
-            Your chats.
-            <br /><span style={{ color: "#D29A2D" }}>Your device.</span>
-          </h2>
-          <p className="text-base leading-relaxed mb-8" style={{ color: "#595F61" }}>
-            A full chat that keeps every conversation in your own browser. Generate text, images, and speech inline,
-            attach an image to ask about it, edit or regenerate any turn, and download what you make. You choose how
-            long a chat lives before it dissolves; we never store your chat content. Start on a free trial, no card needed.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
-              style={{ background: "rgba(210,154,45,0.08)", color: "#D29A2D", border: "1px solid rgba(210,154,45,0.2)" }}>
-              <Gift size={15} /> Free trial for 3 months
-            </span>
-            <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
-              style={{ background: "#111314", color: "#7A8285", border: "1px solid #1E2022" }}>
-              <Sparkles size={15} /> Text, image, and voice inline
-            </span>
-            <span className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-xl"
-              style={{ background: "#111314", color: "#7A8285", border: "1px solid #1E2022" }}>
-              <ShieldCheck size={15} /> Nothing stored server-side
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }} transition={{ duration: 0.8, delay: 0.15 }}
-          className="rounded-2xl p-5 space-y-3"
-          style={{ background: "#0D0E0F", border: "1px solid #1E2022", boxShadow: "0 32px 80px rgba(0,0,0,0.6)" }}
-        >
-          {[
-            { me: false, text: "Write me a haiku about silk." },
-            { me: true, text: "Threads of gold and light / weaving every model through / one quiet gateway." },
-          ].map((b, i) => (
-            <motion.div key={i}
-              initial={{ opacity: 0, x: b.me ? 20 : -20 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ delay: 0.3 + i * 0.25 }}
-              className={`flex ${b.me ? "justify-end" : "justify-start"}`}
-            >
-              <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm"
-                style={b.me
-                  ? { background: "#D29A2D", color: "#0A0A0A" }
-                  : { background: "#141617", color: "#C2C9CC", border: "1px solid #1E2022" }}>
-                {b.text}
-              </div>
-            </motion.div>
-          ))}
-          <div className="flex items-center gap-2 pt-1">
-            <div className="flex-1 rounded-xl px-3 py-2 text-xs font-mono" style={{ background: "#141617", color: "#3A3F42", border: "1px solid #1E2022" }}>
-              Message SilkLLM...
+    <Section id="trust">
+      <SectionHead eyebrow="What you keep" title="Built so your data stays yours" center />
+      <div className="grid md:grid-cols-3 gap-4 mt-10">
+        {GUARANTEES.map((g, i) => (
+          <Reveal key={g.title} delay={i * 0.07}>
+            <div className="card card-pad h-full">
+              <span className="w-10 h-10 rounded-xl bg-accent/10 text-accent-ink flex items-center justify-center">
+                {g.icon}
+              </span>
+              <p className="text-sm font-semibold text-ink mt-4">{g.title}</p>
+              <p className="text-sm text-ink-2 mt-1.5 leading-relaxed">{g.desc}</p>
             </div>
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "#D29A2D", color: "#0A0A0A" }}>
-              <ArrowRight size={15} />
-            </div>
-          </div>
-        </motion.div>
+          </Reveal>
+        ))}
       </div>
-    </section>
+    </Section>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ROOT
-// ─────────────────────────────────────────────────────────────────────────────
+function CTA() {
+  return (
+    <Section className="bg-sunken border-t border-line">
+      <Reveal>
+        <div className="card card-pad sm:p-12 text-center relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: "radial-gradient(50rem 24rem at 50% 0%, rgb(var(--c-accent) / 0.14), transparent 70%)" }}
+          />
+          <div className="relative">
+            <span className="inline-flex w-12 h-12 rounded-2xl bg-accent/12 text-accent-ink items-center justify-center">
+              <Layers size={22} />
+            </span>
+            <h2 className="font-display text-2xl sm:text-4xl font-bold tracking-tight text-ink mt-5">
+              One integration. Every model.
+            </h2>
+            <p className="text-base text-ink-2 mt-4 max-w-lg mx-auto leading-relaxed">
+              Stop maintaining nine SDKs, nine billing relationships and nine sets of rate limits.
+              Start with the free allowance and see how far it gets you.
+            </p>
+            <div className="flex flex-wrap gap-3 justify-center mt-8">
+              <Link to="/login" className="btn-primary h-11 px-6">
+                Get started free <ArrowRight size={16} />
+              </Link>
+              <Link to="/docs" className="btn-secondary h-11 px-6">Read the docs</Link>
+            </div>
+          </div>
+        </div>
+      </Reveal>
+    </Section>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────────────────
+
 export default function Landing() {
-  // The custom cursor is desktop-only; touch devices keep their native behavior.
-  const [finePointer, setFinePointer] = useState(false);
-  useEffect(() => {
-    setFinePointer(typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches);
-  }, []);
-
   return (
-    <div style={{ background: "#0A0A0A", cursor: finePointer ? "none" : "auto" }}>
-      {finePointer && <MagneticCursor />}
-      <Nav />
-      <Hero />
-      <StatsRow />
-      <EarnLoop />
-      <SilkThread />
-      <Modalities />
-      <Voice />
-      <HowItWorks />
-      <Providers />
-      <SilkThread />
-      <OwnData />
-      <Pricing />
-      <DevExperience />
-      <SilkThread height={90} />
-      <CTA />
-      <Footer />
+    <div className="min-h-[100dvh] bg-page text-ink overflow-x-clip">
+      <PublicNav />
+      <main>
+        <Hero />
+        <Marquee />
+        <Modalities />
+        <Marketplace />
+        <HowItWorks />
+        <Providers />
+        <Voice />
+        <Pricing />
+        <Guarantees />
+        <CTA />
+      </main>
+      <PublicFooter />
     </div>
   );
 }
+
+// EOF silkllm-frontend/src/pages/public/Landing.tsx

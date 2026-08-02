@@ -22,6 +22,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { notificationsApi, trialApi } from "@/services/api";
 import PaymentReminderModal from "@/components/PaymentReminderModal";
 import CommandPalette from "@/components/CommandPalette";
+import Logo from "@/components/Logo";
+import InstallInvite, { OfflineBar, UpdateBar } from "@/components/AppInstall";
 import { IconButton, Kbd, Menu, MenuItem, MenuLabel, MenuSeparator, Meter } from "@/components/ui";
 import {
   LayoutDashboard, Key, CreditCard, BarChart2, MessageSquare, Coins,
@@ -322,6 +324,14 @@ export default function DashboardLayout({ children, fullBleed }: {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
   });
+  // Set when a newer build has been cached and is waiting to take over.
+  const [updateWaiting, setUpdateWaiting] = useState(false);
+
+  useEffect(() => {
+    const onUpdate = () => setUpdateWaiting(true);
+    window.addEventListener("silk:update-ready", onUpdate);
+    return () => window.removeEventListener("silk:update-ready", onUpdate);
+  }, []);
 
   const title = TITLES[pathname] || "Dashboard";
 
@@ -353,11 +363,8 @@ export default function DashboardLayout({ children, fullBleed }: {
     return (
       <div className="flex flex-col h-full">
         <div className={clsx("flex items-center h-14 shrink-0 border-b border-line", isCollapsed ? "justify-center px-2" : "px-4 gap-2")}>
-          <Link to="/" className="flex items-center gap-2 min-w-0" title="SilkLLM">
-            <span className="w-7 h-7 rounded-lg bg-accent text-on-accent font-display font-bold text-sm flex items-center justify-center shrink-0">
-              S
-            </span>
-            {!isCollapsed && <span className="font-display font-bold text-[15px] text-ink truncate">SilkLLM</span>}
+          <Link to="/" className="flex items-center min-w-0" title="SilkLLM">
+            <Logo size={28} showWord={!isCollapsed} wordClassName="text-[15px]" />
           </Link>
           {mobile && (
             <IconButton label="Close menu" size={32} className="ml-auto" onClick={() => setDrawer(false)}>
@@ -385,11 +392,14 @@ export default function DashboardLayout({ children, fullBleed }: {
   };
 
   return (
-    <div className="flex h-[100dvh] bg-page text-ink">
+    // app-shell tells globals.css to lock body scrolling: this is a fixed
+    // height app whose panes scroll individually, not a scrolling document.
+    // app-chrome stops the frame behaving like selectable text on touch.
+    <div className="app-shell app-chrome flex h-[100dvh] bg-page text-ink overflow-hidden">
       {/* Desktop sidebar */}
       <aside
         className={clsx(
-          "hidden lg:flex flex-col shrink-0 bg-surface border-r border-line transition-[width] duration-200",
+          "hidden lg:flex flex-col shrink-0 bg-surface border-r border-line transition-[width] duration-200 pl-safe",
           collapsed ? "w-[68px]" : "w-[248px]",
         )}
       >
@@ -400,15 +410,22 @@ export default function DashboardLayout({ children, fullBleed }: {
       {drawer && (
         <div className="fixed inset-0 z-[70] lg:hidden">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] animate-fade-in" onClick={() => setDrawer(false)} />
-          <aside className="relative w-[272px] max-w-[85%] h-full bg-surface border-r border-line shadow-overlay animate-slide-in-left">
+          <aside className="relative w-[272px] max-w-[85%] h-full bg-surface border-r border-line shadow-overlay animate-slide-in-left pl-safe">
             {sidebar(true)}
           </aside>
         </div>
       )}
 
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Status bar inset. Installed on a notched phone the app draws under
+            the system clock, so the topbar is pushed clear of it. */}
+        <div className="h-safe-top shrink-0 bg-surface" />
+
+        <OfflineBar />
+        <UpdateBar visible={updateWaiting} />
+
         {/* Topbar */}
-        <header className="h-14 shrink-0 flex items-center gap-2 px-3 sm:px-5 bg-surface/85 backdrop-blur-md border-b border-line">
+        <header className="h-14 shrink-0 flex items-center gap-2 px-3 sm:px-5 pr-safe bg-surface/85 backdrop-blur-md border-b border-line">
           <IconButton label="Open menu" className="lg:hidden" onClick={() => setDrawer(true)}>
             <MenuIcon size={19} />
           </IconButton>
@@ -442,9 +459,11 @@ export default function DashboardLayout({ children, fullBleed }: {
           <ThemeMenu />
         </header>
 
-        <main className={clsx("flex-1 min-h-0", fullBleed ? "overflow-hidden" : "overflow-y-auto")}>
+        {/* selectable puts text selection back for actual content, since the
+            shell as a whole opts out of it. */}
+        <main className={clsx("flex-1 min-h-0 selectable", fullBleed ? "overflow-hidden" : "overflow-y-auto")}>
           {fullBleed ? children : (
-            <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+            <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 px-safe pb-safe">
               <div className="mx-auto w-full max-w-[1180px] space-y-6">{children}</div>
             </div>
           )}
@@ -453,6 +472,7 @@ export default function DashboardLayout({ children, fullBleed }: {
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
       <PaymentReminderModal />
+      <InstallInvite />
     </div>
   );
 }

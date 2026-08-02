@@ -276,11 +276,13 @@ export function Switch({
   tone?: "accent" | "danger" | "success";
   size?: "sm" | "md";
 }) {
-  const track = size === "sm" ? "w-[34px] h-[20px]" : "w-[40px] h-[24px]";
-  const knob = size === "sm" ? "w-3.5 h-3.5" : "w-[18px] h-[18px]";
-  const shift = size === "sm"
-    ? (checked ? "translate-x-[17px]" : "translate-x-[3px]")
-    : (checked ? "translate-x-[19px]" : "translate-x-[3px]");
+  // Geometry is computed from three numbers rather than written out as utility
+  // classes, so the travel distance cannot disagree with the track width. The
+  // knob is inset by GAP on both ends, so its travel is width - knob - 2*GAP.
+  const GAP = 3;
+  const { w, h } = size === "sm" ? { w: 34, h: 20 } : { w: 40, h: 24 };
+  const knobSize = h - GAP * 2;
+  const travel = w - knobSize - GAP * 2;
 
   const onColour = { accent: "bg-accent", danger: "bg-danger", success: "bg-success" }[tone];
 
@@ -293,21 +295,27 @@ export function Switch({
       aria-busy={pending || undefined}
       disabled={disabled || pending}
       onClick={() => onChange(!checked)}
+      style={{ width: w, height: h }}
       className={clsx(
-        "relative rounded-full shrink-0 transition-colors duration-150",
-        "disabled:cursor-not-allowed",
+        // p-0 and border-0 matter: a button carries default padding and border,
+        // and the knob is positioned against the padding box, so without them
+        // the "on" position pushed the knob clear of the track.
+        "relative rounded-full shrink-0 p-0 border-0 overflow-hidden",
+        "transition-colors duration-150 disabled:cursor-not-allowed",
         pending && "opacity-70",
         (disabled && !pending) && "opacity-40",
-        track,
         checked ? onColour : "bg-line-strong hover:bg-ink-3/60",
       )}
     >
       <span
-        className={clsx(
-          "absolute top-[3px] rounded-full bg-white shadow-xs transition-transform duration-150",
-          knob,
-          shift,
-        )}
+        className="absolute rounded-full bg-white shadow-xs transition-transform duration-150 ease-out"
+        style={{
+          width: knobSize,
+          height: knobSize,
+          top: GAP,
+          left: GAP,
+          transform: `translateX(${checked ? travel : 0}px)`,
+        }}
       />
     </button>
   );

@@ -7,12 +7,15 @@
 
 // File: silkllm-frontend/src/pages/public/Docs.tsx
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Copy, CheckCircle, BookOpen, Key, Zap, Layers, Code2, AlertTriangle,
-  ArrowLeft, ArrowRight, Coins, Gift, Image as ImageIcon, MessageSquare,
+  ArrowLeft, ArrowRight, ChevronDown, Coins, Gift, Image as ImageIcon,
+  MessageSquare, Search,
 } from "lucide-react";
+import clsx from "clsx";
+import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
 
 // ── Code snippets (Python / JavaScript pairs) ────────────────────────────────
 const CODE = {
@@ -164,14 +167,12 @@ console.log(audio.voice, audio.format, audio.audio_b64.length);`,
   pySetup: `pip install silkllm
 
 from silkllm import Client
-client = Client(api_key="silk_your_key")  # or set SILKLLM_API_KEY
-# For local testing: Client(api_key="silk_...", base_url="http://localhost:8000")`,
+client = Client()  # reads SILKLLM_API_KEY; the endpoint is built in`,
 
   jsSetup: `npm install silkllm
 
 import SilkLLM from "silkllm";
-const client = new SilkLLM({ apiKey: "silk_your_key" }); // or SILKLLM_API_KEY
-// For local testing: new SilkLLM({ apiKey: "silk_...", baseUrl: "http://localhost:8000" })`,
+const client = new SilkLLM(); // reads SILKLLM_API_KEY; the endpoint is built in`,
 
   pyVision: `from silkllm import text_part, image_part
 
@@ -265,6 +266,8 @@ console.log(result.format, result.audio_b64.length);`,
 };
 
 // ── Lightweight syntax colorizer ─────────────────────────────────────────────
+// Only comments are distinguished, which is the one thing that genuinely helps
+// scanning. Colours come from tokens so it reads in both themes.
 function colorize(line: string): React.ReactNode {
   const hash = line.indexOf("#");
   const slashes = line.indexOf("//");
@@ -272,12 +275,12 @@ function colorize(line: string): React.ReactNode {
   if (idx >= 0 && !line.slice(0, idx).includes('"')) {
     return (
       <>
-        <span style={{ color: "#EDEFF0" }}>{line.slice(0, idx)}</span>
-        <span style={{ color: "#595F61", fontStyle: "italic" }}>{line.slice(idx)}</span>
+        <span className="text-ink">{line.slice(0, idx)}</span>
+        <span className="text-ink-3 italic">{line.slice(idx)}</span>
       </>
     );
   }
-  return <span style={{ color: "#EDEFF0" }}>{line}</span>;
+  return <span className="text-ink">{line}</span>;
 }
 
 function CodeBlock({ code, lang = "python" }: { code: string; lang?: string }) {
@@ -285,14 +288,19 @@ function CodeBlock({ code, lang = "python" }: { code: string; lang?: string }) {
   const copy = () => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const label: Record<string, string> = { python: "Python", javascript: "JavaScript", bash: "Shell", http: "HTTP" };
   return (
-    <div className="rounded-xl overflow-hidden border my-3" style={{ borderColor: "#2C2F31", background: "#141617" }}>
-      <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: "#2C2F31", background: "#1A1C1D" }}>
-        <span className="text-xs font-mono" style={{ color: "#7A8285" }}>{label[lang] || lang}</span>
-        <button onClick={copy} className="flex items-center gap-1.5 text-xs" style={{ color: copied ? "#74aa9c" : "#7A8285" }}>
-          {copied ? <><CheckCircle size={11} /> Copied</> : <><Copy size={11} /> Copy</>}
+    <div className="rounded-xl overflow-hidden border border-line bg-sunken my-3">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-line">
+        <span className="text-2xs font-mono text-ink-3">{label[lang] || lang}</span>
+        <button
+          onClick={copy}
+          className="inline-flex items-center gap-1.5 text-2xs text-ink-3 hover:text-ink transition-colors"
+        >
+          {copied ? <><CheckCircle size={11} className="text-success" /> Copied</> : <><Copy size={11} /> Copy</>}
         </button>
       </div>
-      <pre className="p-5 overflow-x-auto text-sm font-mono leading-7" style={{ background: "#141617", margin: 0 }}>
+      {/* The snippet is the one thing on this page that must not be reflowed,
+          so it scrolls inside its own box rather than widening the page. */}
+      <pre className="p-4 sm:p-5 overflow-x-auto text-[13px] font-mono leading-7 m-0 text-ink">
         {code.split("\n").map((line, i) => (
           <div key={i}>{colorize(line)}</div>
         ))}
@@ -301,21 +309,22 @@ function CodeBlock({ code, lang = "python" }: { code: string; lang?: string }) {
   );
 }
 
-// Python / JavaScript toggle over a pair of snippets.
+/** Python / JavaScript toggle over a pair of snippets. */
 function LangTabs({ python, javascript }: { python: string; javascript: string }) {
   const [lang, setLang] = useState<"python" | "javascript">("python");
   return (
-    <div>
-      <div className="flex gap-1 mb-1">
+    <div className="my-3">
+      <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-sunken border border-line mb-2">
         {(["python", "javascript"] as const).map((l) => (
-          <button key={l} onClick={() => setLang(l)}
-            className="text-xs px-3 py-1.5 rounded-t-lg font-medium"
-            style={{
-              background: lang === l ? "#141617" : "transparent",
-              color: lang === l ? "#D29A2D" : "#7A8285",
-              border: lang === l ? "1px solid #2C2F31" : "1px solid transparent",
-              borderBottom: "none",
-            }}>
+          <button
+            key={l}
+            onClick={() => setLang(l)}
+            aria-pressed={lang === l}
+            className={clsx(
+              "px-3 h-7 rounded-[7px] text-xs font-medium transition-all",
+              lang === l ? "bg-surface text-ink shadow-xs" : "text-ink-2 hover:text-ink",
+            )}
+          >
             {l === "python" ? "Python" : "JavaScript"}
           </button>
         ))}
@@ -326,43 +335,52 @@ function LangTabs({ python, javascript }: { python: string; javascript: string }
 }
 
 function Pill({ children }: { children: React.ReactNode }) {
-  return <code className="text-sm font-mono px-1.5 py-0.5 rounded" style={{ background: "#242729", color: "#D29A2D", border: "1px solid #2C2F31" }}>{children}</code>;
+  return (
+    <code className="text-[0.85em] font-mono px-1.5 py-0.5 rounded bg-ink/[0.06] text-accent-ink border border-line">
+      {children}
+    </code>
+  );
 }
 
 function Para({ children }: { children: React.ReactNode }) {
-  return <p className="mb-4 leading-relaxed" style={{ color: "#9AA0A3" }}>{children}</p>;
+  return <p className="mb-4 leading-relaxed text-ink-2">{children}</p>;
 }
 
 function H3({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold uppercase tracking-wider mt-6 mb-3" style={{ color: "#595F61" }}>{children}</h3>;
+  return <h3 className="text-2xs font-semibold uppercase tracking-wider mt-7 mb-3 text-ink-3">{children}</h3>;
 }
 
 function DocTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
-    <div className="rounded-xl overflow-x-auto my-4" style={{ border: "1px solid #242729" }}>
-      <table className="w-full text-sm">
-        <thead>
-          <tr style={{ background: "#1A1C1D", borderBottom: "1px solid #2C2F31" }}>
-            {headers.map((h) => <th key={h} className="text-left px-4 py-3 text-xs font-mono uppercase tracking-wider" style={{ color: "#7A8285" }}>{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} style={{ borderBottom: i < rows.length - 1 ? "1px solid #1E2022" : "none", background: i % 2 === 0 ? "#141617" : "#161819" }}>
-              {row.map((cell, j) => (
-                <td key={j} className="px-4 py-3" style={{ color: j === 0 ? "#D29A2D" : "#9AA0A3", fontFamily: j === 0 ? "JetBrains Mono, monospace" : "inherit", fontSize: j === 0 ? "0.8rem" : "inherit" }}>{cell}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="rounded-xl border border-line overflow-hidden my-4">
+      <div className="scroll-x">
+        <table className="table-shell">
+          <thead>
+            <tr>{headers.map((h) => <th key={h}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i}>
+                {row.map((cell, j) => (
+                  <td
+                    key={j}
+                    className={j === 0 ? "font-mono text-xs text-accent-ink whitespace-nowrap" : "text-sm text-ink-2"}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 function Callout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl px-4 py-3.5 my-4 text-sm leading-relaxed" style={{ background: "#D29A2D0D", border: "1px solid #D29A2D30", color: "#C2C9CC" }}>
+    <div className="rounded-xl px-4 py-3.5 my-4 text-sm leading-relaxed bg-accent/[0.07] border border-accent/25 text-ink-2">
       {children}
     </div>
   );
@@ -582,84 +600,152 @@ const SECTIONS = [
 ];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
+
 export default function Docs() {
   const [active, setActive] = useState(0);
+  const [query, setQuery] = useState("");
+  const [navOpen, setNavOpen] = useState(false);
+
   const section = SECTIONS[active];
   const prev = active > 0 ? SECTIONS[active - 1] : null;
   const next = active < SECTIONS.length - 1 ? SECTIONS[active + 1] : null;
 
-  const go = (i: number) => { setActive(i); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  // Deep links from the marketing pages land on a named section.
+  useEffect(() => {
+    const id = window.location.hash.replace("#", "");
+    if (!id) return;
+    const i = SECTIONS.findIndex((s) => s.id === id);
+    if (i >= 0) setActive(i);
+  }, []);
+
+  const go = (i: number) => {
+    setActive(i);
+    setNavOpen(false);
+    window.history.replaceState(null, "", `#${SECTIONS[i].id}`);
+    document.getElementById("doc-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const q = query.trim().toLowerCase();
+  const matches = q ? SECTIONS.filter((s) => s.label.toLowerCase().includes(q)) : SECTIONS;
+
+  const sidebar = (
+    <nav className="space-y-0.5">
+      {matches.length === 0 && (
+        <p className="px-3 py-6 text-xs text-ink-3 text-center">No section matches "{query}".</p>
+      )}
+      {matches.map((s) => {
+        const i = SECTIONS.indexOf(s);
+        return (
+          <button
+            key={s.id}
+            onClick={() => go(i)}
+            className={clsx(
+              "relative w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-sm text-left transition-colors",
+              i === active
+                ? "bg-accent/10 text-accent-ink font-medium"
+                : "text-ink-2 hover:text-ink hover:bg-ink/[0.05]",
+            )}
+          >
+            {i === active && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-accent" />
+            )}
+            <span className={clsx("shrink-0", i === active ? "opacity-100" : "opacity-60")}>{s.icon}</span>
+            <span className="truncate">{s.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
 
   return (
-    <div className="min-h-screen" style={{ background: "#111314", color: "#EDEFF0" }}>
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4"
-        style={{ background: "#111314CC", backdropFilter: "blur(12px)", borderBottom: "1px solid #1E2022" }}>
-        <Link to="/" className="font-display font-bold text-xl" style={{ color: "#D29A2D" }}>SilkLLM</Link>
-        <div className="flex items-center gap-5 text-sm" style={{ color: "#7A8285" }}>
-          <Link to="/" style={{ color: "#7A8285" }}>Home</Link>
-          <Link to="/login" className="btn-primary text-sm py-1.5 px-4 rounded-lg">Dashboard</Link>
+    <div className="min-h-[100dvh] bg-page text-ink overflow-x-clip">
+      <PublicNav />
+
+      <div id="doc-top" className="scroll-mt-24" />
+
+      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 px-safe pt-24 pb-16">
+        <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-10">
+          {/* Desktop sidebar */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-24 max-h-[calc(100dvh-8rem)] overflow-y-auto pr-2">
+              <div className="relative mb-3">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter sections"
+                  className="input h-9 pl-8 text-xs"
+                />
+              </div>
+              <p className="px-3 pt-2 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-3">
+                Documentation
+              </p>
+              {sidebar}
+            </div>
+          </aside>
+
+          <main className="min-w-0">
+            {/* Mobile section switcher */}
+            <div className="lg:hidden mb-6">
+              <button
+                onClick={() => setNavOpen((o) => !o)}
+                className="w-full flex items-center gap-2.5 h-11 px-3.5 rounded-lg border border-line bg-surface text-sm"
+              >
+                <span className="text-accent-ink shrink-0">{section.icon}</span>
+                <span className="flex-1 text-left font-medium text-ink truncate">{section.label}</span>
+                <span className="text-2xs text-ink-3 num shrink-0">{active + 1}/{SECTIONS.length}</span>
+                <ChevronDown size={15} className={clsx("text-ink-3 shrink-0 transition-transform", navOpen && "rotate-180")} />
+              </button>
+              {navOpen && (
+                <div className="mt-2 p-2 rounded-xl border border-line bg-surface shadow-raised max-h-[60vh] overflow-y-auto">
+                  {sidebar}
+                </div>
+              )}
+            </div>
+
+            <header className="mb-8">
+              <p className="text-2xs font-mono uppercase tracking-widest text-ink-3 mb-2">
+                {active + 1} / {SECTIONS.length}
+              </p>
+              <h1 className="font-display font-bold text-[1.75rem] sm:text-4xl tracking-tight text-ink flex items-center gap-3">
+                <span className="text-accent-ink shrink-0">{section.icon}</span>
+                <span className="min-w-0">{section.label}</span>
+              </h1>
+              <div
+                className="h-px mt-5"
+                style={{ background: "linear-gradient(90deg, rgb(var(--c-accent) / 0.45), transparent)" }}
+              />
+            </header>
+
+            <article className="min-h-[40vh] selectable">{section.body}</article>
+
+            {/* Pager, named by destination so it says where it goes. */}
+            <div className="grid sm:grid-cols-2 gap-3 mt-14 pt-6 border-t border-line">
+              {prev ? (
+                <button
+                  onClick={() => go(active - 1)}
+                  className="text-left rounded-xl border border-line bg-surface px-4 py-3 hover:border-line-strong hover:bg-sunken transition-colors"
+                >
+                  <span className="flex items-center gap-1.5 text-2xs text-ink-3"><ArrowLeft size={12} /> Previous</span>
+                  <span className="block mt-1 text-sm font-medium text-ink truncate">{prev.label}</span>
+                </button>
+              ) : <div className="hidden sm:block" />}
+              {next ? (
+                <button
+                  onClick={() => go(active + 1)}
+                  className="text-right rounded-xl border border-line bg-surface px-4 py-3 hover:border-line-strong hover:bg-sunken transition-colors sm:col-start-2"
+                >
+                  <span className="flex items-center justify-end gap-1.5 text-2xs text-ink-3">Next <ArrowRight size={12} /></span>
+                  <span className="block mt-1 text-sm font-medium text-ink truncate">{next.label}</span>
+                </button>
+              ) : null}
+            </div>
+          </main>
         </div>
-      </nav>
-
-      <div className="flex pt-16 max-w-6xl mx-auto">
-        {/* Sidebar: switches the active section */}
-        <aside className="hidden lg:block w-60 shrink-0 sticky top-16 h-[calc(100vh-4rem)] overflow-y-auto py-8 pr-4">
-          <p className="text-xs font-mono uppercase tracking-widest mb-3 px-3" style={{ color: "#595F61" }}>Documentation</p>
-          <nav className="space-y-0.5">
-            {SECTIONS.map((s, i) => (
-              <button key={s.id} onClick={() => go(i)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left transition-all"
-                style={{
-                  background: i === active ? "#D29A2D14" : "transparent",
-                  color: i === active ? "#D29A2D" : "#7A8285",
-                  borderLeft: i === active ? "2px solid #D29A2D" : "2px solid transparent",
-                }}>
-                <span style={{ opacity: i === active ? 1 : 0.5 }}>{s.icon}</span>
-                {s.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        <main className="flex-1 py-10 px-6 lg:px-12 min-w-0">
-          <div className="mb-8">
-            <p className="text-xs font-mono uppercase tracking-widest mb-2" style={{ color: "#595F61" }}>
-              {active + 1} / {SECTIONS.length}
-            </p>
-            <h1 className="font-display font-bold text-4xl flex items-center gap-3" style={{ color: "#EDEFF0" }}>
-              <span style={{ color: "#D29A2D" }}>{section.icon}</span>{section.label}
-            </h1>
-            <div className="h-px mt-5" style={{ background: "linear-gradient(90deg, #D29A2D44, transparent)" }} />
-          </div>
-
-          {/* Mobile section picker */}
-          <select className="lg:hidden input mb-6" value={active} onChange={(e) => go(Number(e.target.value))}>
-            {SECTIONS.map((s, i) => <option key={s.id} value={i}>{s.label}</option>)}
-          </select>
-
-          <div className="min-h-[40vh]">{section.body}</div>
-
-          {/* Pager, named by destination */}
-          <div className="flex items-stretch gap-3 mt-14 pt-6" style={{ borderTop: "1px solid #1E2022" }}>
-            {prev ? (
-              <button onClick={() => go(active - 1)}
-                className="flex-1 text-left rounded-xl px-4 py-3 transition-colors"
-                style={{ border: "1px solid #242729", background: "#141617" }}>
-                <span className="flex items-center gap-1.5 text-xs" style={{ color: "#595F61" }}><ArrowLeft size={12} /> Previous</span>
-                <span className="block mt-1 font-medium" style={{ color: "#D29A2D" }}>{prev.label}</span>
-              </button>
-            ) : <div className="flex-1" />}
-            {next ? (
-              <button onClick={() => go(active + 1)}
-                className="flex-1 text-right rounded-xl px-4 py-3 transition-colors"
-                style={{ border: "1px solid #242729", background: "#141617" }}>
-                <span className="flex items-center justify-end gap-1.5 text-xs" style={{ color: "#595F61" }}>Next <ArrowRight size={12} /></span>
-                <span className="block mt-1 font-medium" style={{ color: "#D29A2D" }}>{next.label}</span>
-              </button>
-            ) : <div className="flex-1" />}
-          </div>
-        </main>
       </div>
+
+      <PublicFooter />
     </div>
   );
 }

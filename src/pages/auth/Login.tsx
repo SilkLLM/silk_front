@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Github, ShieldCheck } from "lucide-react";
 import { authApi } from "@/services/api";
+import Logo from "@/components/Logo";
 
 function GoogleIcon() {
   return (
@@ -35,11 +36,8 @@ export default function Login() {
         className="w-full max-w-[400px]"
       >
         <div className="text-center mb-7">
-          <Link to="/" className="inline-flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-xl bg-accent text-on-accent font-display font-bold flex items-center justify-center">
-              S
-            </span>
-            <span className="font-display font-bold text-2xl text-ink">SilkLLM</span>
+          <Link to="/" className="inline-flex items-center">
+            <Logo size={38} wordClassName="text-2xl" className="gap-2.5" />
           </Link>
           <p className="text-sm text-ink-2 mt-3">One key for every model. Sign in to continue.</p>
         </div>

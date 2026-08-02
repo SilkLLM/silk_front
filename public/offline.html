@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>SilkLLM is offline</title>
+    <!--
+      Served by the service worker when a navigation fails and no cached shell is
+      available. It has no bundle behind it, so everything is inline.
+    -->
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 2rem calc(1.5rem + env(safe-area-inset-left)) 2rem calc(1.5rem + env(safe-area-inset-right));
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: #F6F5F2;
+        color: #1A1918;
+        text-align: center;
+        -webkit-font-smoothing: antialiased;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #0D0F10; color: #F2F1EE; }
+        .muted { color: #A8A49C !important; }
+        .card { background: #17191A !important; border-color: #2A2E30 !important; }
+      }
+      .card {
+        max-width: 26rem;
+        width: 100%;
+        padding: 2rem 1.75rem;
+        background: #FFFFFF;
+        border: 1px solid #E5E2DB;
+        border-radius: 16px;
+      }
+      .mark {
+        width: 56px; height: 56px;
+        margin: 0 auto 1.25rem;
+        border-radius: 14px;
+        background: #16181A;
+        display: grid; place-items: center;
+      }
+      .mark img { width: 40px; height: 40px; }
+      h1 { font-size: 1.125rem; margin: 0 0 .5rem; font-weight: 600; letter-spacing: -0.01em; }
+      p { margin: 0; font-size: .875rem; line-height: 1.6; }
+      .muted { color: #57534E; }
+      button {
+        margin-top: 1.5rem;
+        font: inherit;
+        font-size: .875rem;
+        font-weight: 500;
+        padding: 0 1.125rem;
+        height: 40px;
+        border: 0;
+        border-radius: 10px;
+        background: #D29A2D;
+        color: #1A1918;
+        cursor: pointer;
+      }
+      button:active { filter: brightness(.95); }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="mark"><img src="/logo-mark.png" alt="" /></div>
+      <h1>You are offline</h1>
+      <p class="muted">
+        SilkLLM needs a connection to reach the models. Your saved chats are still
+        on this device and will be here when you get back.
+      </p>
+      <button onclick="location.reload()">Try again</button>
+    </div>
+    <script>
+      // Reload the moment connectivity returns, so the user does not have to.
+      addEventListener("online", () => location.reload());
+    </script>
+  </body>
+</html>

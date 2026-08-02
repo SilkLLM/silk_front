@@ -95,6 +95,9 @@ export default {
         "slide-in-left": "slideInLeft 0.24s cubic-bezier(0.16, 1, 0.3, 1)",
         "glow-pulse": "glowPulse 2s ease-in-out infinite",
         shimmer:      "shimmer 1.6s ease-in-out infinite",
+        // The marquee track holds two copies of its content, so travelling -50%
+        // lands exactly on the start of the second copy: a seamless loop.
+        marquee:      "marquee 38s linear infinite",
       },
       keyframes: {
         fadeIn:  { "0%": { opacity: 0 }, "100%": { opacity: 1 } },
@@ -103,6 +106,7 @@ export default {
         slideInLeft: { "0%": { transform: "translateX(-100%)" }, "100%": { transform: "translateX(0)" } },
         glowPulse: { "0%,100%": { boxShadow: "0 0 8px #D29A2D55" }, "50%": { boxShadow: "0 0 24px #D29A2Daa" } },
         shimmer: { "0%,100%": { opacity: 0.45 }, "50%": { opacity: 0.8 } },
+        marquee: { "0%": { transform: "translateX(0)" }, "100%": { transform: "translateX(-50%)" } },
       },
     },
   },
