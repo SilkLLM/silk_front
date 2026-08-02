@@ -61,8 +61,22 @@ export const authApi = {
 
 export const keysApi = {
   list: () => api.get("/keys"),
-  create: (name: string) => api.post("/keys", { name }),
+  /** `spendLimitUsd` caps how much of your balance this key may draw. Omit for no cap. */
+  create: (name: string, spendLimitUsd?: number) =>
+    api.post("/keys", { name, spend_limit_usd: spendLimitUsd ?? null }),
+  /** Rename, change the cap, or disable. Pass clear_spend_limit to remove a cap. */
+  update: (id: string, data: {
+    name?: string;
+    spend_limit_usd?: number;
+    clear_spend_limit?: boolean;
+    is_active?: boolean;
+  }) => api.patch(`/keys/${id}`, data),
   revoke: (id: string) => api.delete(`/keys/${id}`),
+  /** Per-key request history, newest first. Includes refused attempts. */
+  usage: (id: string, page = 1, pageSize = 50, status?: string) =>
+    api.get(`/keys/${id}/usage`, { params: { page, page_size: pageSize, status } }),
+  /** Zero the spend counter. Does not touch the history or refund anything. */
+  reset: (id: string) => api.post(`/keys/${id}/reset`),
 };
 
 export const balanceApi = {

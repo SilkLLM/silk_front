@@ -10,7 +10,7 @@
 
 // File: silkllm-frontend/src/components/ui.tsx
 
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, Minus, Search, X } from "lucide-react";
 import clsx from "clsx";
@@ -776,15 +776,39 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, body, confirmLa
   );
 }
 
-/** Dropdown anchored to a trigger, closing on outside click or escape. */
-export function Menu({ trigger, children, align = "right", width = 220 }: {
+/**
+ * Dropdown anchored to a trigger, closing on outside click or escape.
+ *
+ * It flips above the trigger when there is not enough room below. The account
+ * menu lives at the very bottom of the sidebar, so a menu that only ever opened
+ * downward fell off the screen: unreadable and impossible to click. The side is
+ * measured on open rather than assumed, so the same component works for the
+ * topbar menus that open downward and the sidebar one that opens upward.
+ */
+export function Menu({ trigger, children, align = "right", width = 220, placement = "auto" }: {
   trigger: (props: { open: boolean; toggle: () => void }) => React.ReactNode;
   children: (close: () => void) => React.ReactNode;
   align?: "left" | "right";
   width?: number;
+  placement?: "auto" | "top" | "bottom";
 }) {
   const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<"top" | "bottom">(placement === "top" ? "top" : "bottom");
   const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Decide the side before paint, so the panel never appears in the wrong place
+  // and then jumps.
+  useLayoutEffect(() => {
+    if (!open || placement !== "auto") return;
+    const trigger = wrapRef.current?.getBoundingClientRect();
+    if (!trigger) return;
+    const height = panelRef.current?.offsetHeight ?? 240;
+    const below = window.innerHeight - trigger.bottom;
+    const above = trigger.top;
+    // Only flip when below genuinely cannot fit and above can do better.
+    setSide(below < height + 12 && above > below ? "top" : "bottom");
+  }, [open, placement]);
 
   useEffect(() => {
     if (!open) return;
@@ -800,14 +824,22 @@ export function Menu({ trigger, children, align = "right", width = 220 }: {
     };
   }, [open]);
 
+  const resolved = placement === "auto" ? side : placement;
+
   return (
     <div ref={wrapRef} className="relative">
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
       {open && (
         <div
+          ref={panelRef}
           className={clsx(
-            "absolute top-[calc(100%+6px)] z-50 rounded-xl border border-line bg-raised shadow-overlay p-1.5 animate-scale-in origin-top",
+            "absolute z-50 rounded-xl border border-line bg-raised shadow-overlay p-1.5 animate-scale-in",
+            resolved === "top"
+              ? "bottom-[calc(100%+6px)] origin-bottom"
+              : "top-[calc(100%+6px)] origin-top",
             align === "right" ? "right-0" : "left-0",
+            // Never taller than the space it has; scroll inside instead.
+            "max-h-[min(24rem,70vh)] overflow-y-auto",
           )}
           style={{ width }}
         >

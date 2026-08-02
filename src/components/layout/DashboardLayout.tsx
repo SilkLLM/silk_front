@@ -178,6 +178,7 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
     <Menu
       align="left"
       width={228}
+      placement="top"
       trigger={({ toggle }) => (
         <button
           onClick={toggle}

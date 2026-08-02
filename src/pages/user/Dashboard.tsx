@@ -22,7 +22,7 @@ import { format } from "date-fns";
 import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
-import { usageApi, modelsApi, trialApi, providerKeysApi } from "@/services/api";
+import { usageApi, modelsApi, trialApi, providerKeysApi, keysApi } from "@/services/api";
 import {
   Badge, Button, Card, EmptyState, Meter, Panel, SegmentedControl, Skeleton, StatTile,
 } from "@/components/ui";
@@ -42,10 +42,7 @@ interface Model {
   is_active?: boolean;
 }
 
-function storedKeyCount(): number {
-  try { return (JSON.parse(localStorage.getItem("silk_stored_keys") || "[]") as unknown[]).length; }
-  catch { return 0; }
-}
+
 
 // ── Hero: balance ───────────────────────────────────────────────────────────
 
@@ -438,6 +435,12 @@ export default function UserDashboard() {
     queryKey: ["available-models"],
     queryFn: () => modelsApi.list().then((r) => r.data.models as Model[]),
   });
+  // Counted from the server rather than from this browser's cache, so the tile
+  // is right on a machine where the keys were never created.
+  const { data: apiKeys } = useQuery({
+    queryKey: ["api-keys"],
+    queryFn: () => keysApi.list().then((r) => r.data as any[]),
+  });
 
   const entries: any[] = usageData?.entries || [];
 
@@ -500,7 +503,15 @@ export default function UserDashboard() {
         />
         <StatTile label="Total requests" value={compact(stats.requests)} icon={<Zap size={14} />} hint="All time" />
         <StatTile label="Tokens processed" value={compact(stats.tokens)} icon={<BarChart2 size={14} />} hint="Across recent activity" />
-        <StatTile label="API keys" value={storedKeyCount()} icon={<Key size={14} />} hint="Saved in this browser" />
+        <StatTile
+          label="API keys"
+          value={(apiKeys || []).filter((k) => k.is_active).length}
+          icon={<Key size={14} />}
+          hint={(() => {
+            const capped = (apiKeys || []).filter((k) => k.is_active && k.spend_limit_usd !== null).length;
+            return capped ? `${capped} with a spend cap` : "None capped";
+          })()}
+        />
       </div>
 
       <Onboarding />

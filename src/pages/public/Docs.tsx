@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 import {
   Copy, CheckCircle, BookOpen, Key, Zap, Layers, Code2, AlertTriangle,
   ArrowLeft, ArrowRight, ChevronDown, Coins, Gift, Image as ImageIcon,
-  MessageSquare, Search,
+  MessageSquare, Search, Wallet,
 } from "lucide-react";
 import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
@@ -68,6 +68,84 @@ console.log(\`Cost: $\${response.cost_usd} | Balance: $\${response.balance_after
   -H "Authorization: Bearer silk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{"messages":[{"role":"user","content":"Hello!"}],"model":"gpt-4o"}'`,
+
+  pyKeyBudget: `# Create a key that can only ever spend $5 of your balance.
+key = client.create_key("Side project", spend_limit_usd=5.00)
+print(key.key)          # the only time the secret is shown
+
+# Where every key stands.
+for k in client.list_keys():
+    print(k.name, k.spent_usd, "of", k.spend_limit_usd or "uncapped",
+          "AT LIMIT" if k.is_exhausted else "")
+
+# Raise a cap (the key resumes at once, its spend still counted),
+# or remove it entirely.
+client.update_key(key.id, spend_limit_usd=20.00)
+client.update_key(key.id, clear_spend_limit=True)
+
+# Start the budget again. Refunds nothing; keeps the history.
+client.reset_key_usage(key.id)`,
+
+  jsKeyBudget: `// Create a key that can only ever spend $5 of your balance.
+const key = await client.createKey({ name: "Side project", spendLimitUsd: 5.0 });
+console.log(key.key);   // the only time the secret is shown
+
+// Where every key stands.
+for (const k of await client.listKeys()) {
+  console.log(k.name, k.spent_usd, "of", k.spend_limit_usd ?? "uncapped",
+              k.is_exhausted ? "AT LIMIT" : "");
+}
+
+// Raise a cap (the key resumes at once, its spend still counted),
+// or remove it entirely.
+await client.updateKey(key.id, { spendLimitUsd: 20.0 });
+await client.updateKey(key.id, { clearSpendLimit: true });
+
+// Start the budget again. Refunds nothing; keeps the history.
+await client.resetKeyUsage(key.id);`,
+
+  pyKeyAudit: `# Every request this key made, newest first. Refused attempts included.
+history = client.key_usage(key.id, page_size=25)
+print(history.total_requests, "requests,", history.total_cost_usd, "spent")
+
+for e in history.entries:
+    print(e.created_at, e.status, e.served_model, e.cost_usd)
+
+# Only the refusals: this is what a key hitting its cap looks like.
+blocked = client.key_usage(key.id, status="limit_exceeded")
+print("blocked", blocked.total, "times")`,
+
+  jsKeyAudit: `// Every request this key made, newest first. Refused attempts included.
+const history = await client.keyUsage(key.id, { pageSize: 25 });
+console.log(history.total_requests, "requests,", history.total_cost_usd, "spent");
+
+for (const e of history.entries) {
+  console.log(e.created_at, e.status, e.served_model, e.cost_usd);
+}
+
+// Only the refusals: this is what a key hitting its cap looks like.
+const blocked = await client.keyUsage(key.id, { status: "limit_exceeded" });
+console.log("blocked", blocked.total, "times");`,
+
+  curlKeyBudget: `# Create a capped key
+curl -X POST https://silkllm-backend.169.58.53.167.nip.io/api/keys \\
+  -H "Authorization: Bearer silk_your_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"CI pipeline","spend_limit_usd":5.00}'
+
+# Raise the cap
+curl -X PATCH https://silkllm-backend.169.58.53.167.nip.io/api/keys/KEY_ID \\
+  -H "Authorization: Bearer silk_your_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"spend_limit_usd":20.00}'
+
+# History, and just the refusals
+curl "https://silkllm-backend.169.58.53.167.nip.io/api/keys/KEY_ID/usage?page=1&page_size=25" \\
+  -H "Authorization: Bearer silk_your_key"
+
+# Reset the counter (does not refund, does not clear history)
+curl -X POST https://silkllm-backend.169.58.53.167.nip.io/api/keys/KEY_ID/reset \\
+  -H "Authorization: Bearer silk_your_key"`,
 
   pyModels: `for m in client.models().models:
     tag = "free" if m.is_free else "paid"
@@ -302,7 +380,9 @@ function CodeBlock({ code, lang = "python" }: { code: string; lang?: string }) {
           so it scrolls inside its own box rather than widening the page. */}
       <pre className="p-4 sm:p-5 overflow-x-auto text-[13px] font-mono leading-7 m-0 text-ink">
         {code.split("\n").map((line, i) => (
-          <div key={i}>{colorize(line)}</div>
+          // An empty <div> collapses to zero height, which silently swallows the
+          // blank lines that separate logical groups in a snippet.
+          <div key={i}>{line ? colorize(line) : "\u00a0"}</div>
         ))}
       </pre>
     </div>
@@ -416,6 +496,102 @@ const SECTIONS = [
         <Para>Every request needs a Bearer token in the <Pill>Authorization</Pill> header. Keys start with <Pill>silk_</Pill>.</Para>
         <CodeBlock code={`Authorization: Bearer silk_your_api_key_here`} lang="http" />
         <Callout>Never expose a key in client-side code or commit it to version control. Create and revoke keys any time from your dashboard.</Callout>
+      </>
+    ),
+  },
+  {
+    id: "key-budgets", label: "Key spend limits", icon: <Wallet size={14} />,
+    body: (
+      <>
+        <Para>
+          Every API key can carry a spend limit. Once the cost charged to that key reaches the
+          limit, the key stops working, while every other key on your account carries on. This is
+          how you hand a key to a side project, a contractor or a CI pipeline without putting your
+          whole balance at risk.
+        </Para>
+
+        <Callout>
+          A limit is a ceiling on the shared account balance, not a separate wallet. Three keys
+          limited to $10 do not reserve $30 between them; they each simply stop once they have spent
+          $10. Keys with no limit set can use the whole balance, which is how every key behaved
+          before this existed.
+        </Callout>
+
+        <H3>Setting a limit</H3>
+        <Para>
+          Set it when you create the key, or at any time afterwards. Raising the limit on a key that
+          has stopped makes it work again immediately, and its spend so far still counts against the
+          new figure.
+        </Para>
+        <LangTabs python={CODE.pyKeyBudget} javascript={CODE.jsKeyBudget} />
+
+        <H3>What happens at the limit</H3>
+        <Para>
+          The key answers <Pill>402</Pill> with the error code <Pill>key_limit_exceeded</Pill>. That
+          is deliberately distinct from an empty account balance, so your application can tell
+          <em> this key is done</em> apart from <em>this account is out of money</em> and react
+          differently: raise a limit in one case, top up in the other.
+        </Para>
+        <CodeBlock lang="http" code={`HTTP/1.1 402 Payment Required
+
+{
+  "error": {
+    "code": "key_limit_exceeded",
+    "message": "API key \"CI pipeline\" has reached its spend limit ($5.001204 of $5.00 used). Raise the limit or reset the key's usage counter to continue."
+  }
+}`} />
+        <Callout>
+          Requests are checked before any provider is contacted, so a key that has reached its limit
+          costs you nothing when it is refused. Because the pre-flight check uses an estimate and the
+          real cost is only known afterwards, the request that crosses the line can finish very
+          slightly over, exactly as the account balance can.
+        </Callout>
+
+        <H3>Auditing a key</H3>
+        <Para>
+          Every key keeps its own history: what it called, which model served it, how many tokens,
+          what it cost, and how long it took. Attempts that were <em>refused</em> are recorded too,
+          which is the part that matters when a deployment suddenly stops working. A run of
+          <Pill>limit_exceeded</Pill> rows tells you the key ran out of budget rather than the
+          service being down.
+        </Para>
+        <LangTabs python={CODE.pyKeyAudit} javascript={CODE.jsKeyAudit} />
+
+        <DocTable
+          headers={["Status", "Meaning"]}
+          rows={[
+            ["ok", "The request was served and charged."],
+            ["limit_exceeded", "Refused: this key has reached its spend limit."],
+            ["insufficient_balance", "Refused: the account has no credit left."],
+            ["provider_error", "The provider failed after the key was accepted."],
+          ]}
+        />
+
+        <H3>Resetting the counter</H3>
+        <Para>
+          Resetting zeroes the counter the limit is measured against, giving the key its full budget
+          again. It refunds nothing, since that money already left your balance, and it does not
+          delete the usage history. The counter is a budget; the history is a record.
+        </Para>
+
+        <H3>From the API directly</H3>
+        <CodeBlock code={CODE.curlKeyBudget} lang="bash" />
+
+        <DocTable
+          headers={["Endpoint", "Purpose"]}
+          rows={[
+            ["POST /api/keys", "Create a key, optionally with spend_limit_usd."],
+            ["GET /api/keys", "List keys with spent_usd, remaining_usd and is_exhausted."],
+            ["PATCH /api/keys/{id}", "Rename, change the limit, or disable. clear_spend_limit removes a limit."],
+            ["DELETE /api/keys/{id}", "Revoke. History is kept for audit."],
+            ["GET /api/keys/{id}/usage", "Paginated history. Filter with status, page, page_size."],
+            ["POST /api/keys/{id}/reset", "Zero the counter, keep the history."],
+          ]}
+        />
+        <Callout>
+          Removing a limit uses the <Pill>clear_spend_limit</Pill> flag rather than sending null,
+          because an omitted field has to keep meaning "leave this as it is".
+        </Callout>
       </>
     ),
   },
@@ -590,7 +766,8 @@ const SECTIONS = [
           headers={["Code", "HTTP", "Meaning"]}
           rows={[
             ["authentication_error", "401", "Missing or invalid API key"],
-            ["insufficient_balance", "402", "Not enough credits; add more in billing"],
+            ["insufficient_balance", "402", "Not enough credits on the account; add more in billing"],
+            ["key_limit_exceeded", "402", "This API key has reached its own spend limit; raise it or reset the counter"],
             ["model_not_found", "404", "Model does not exist or is disabled"],
             ["validation_error", "422", "Invalid request body"],
             ["rate_limit_exceeded", "429", "Too many requests; slow down"],
