@@ -386,6 +386,81 @@ export const mediaApi = {
 };
 
 // Admin APIs (full CRUD)
+/**
+ * Promotions: discounts on the SilkLLM fee.
+ *
+ * These reduce the margin we add on top of a request, never the credit balance
+ * and never the provider's cost. Every label in the UI has to keep saying so,
+ * because "discount" and "free credit" are easy to confuse and only one of them
+ * is what this is.
+ */
+export interface Promotion {
+  id: string;
+  code: string | null;
+  name: string;
+  description: string | null;
+  discount_percent: number;
+  max_redemptions: number | null;
+  redemption_count: number;
+  seats_left: number | null;
+  starts_at: string | null;
+  expires_at: string | null;
+  duration_days: number | null;
+  restricted_user_ids: string[] | null;
+  restricted_emails: string[] | null;
+  allowed_models: string[] | null;
+  allowed_providers: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  unavailable_reason: string | null;
+  total_fee_saved_usd: number;
+  total_uses: number;
+}
+
+export interface MyPromotion {
+  id: string;
+  promotion_name: string;
+  description: string | null;
+  discount_percent: number;
+  redeemed_at: string;
+  expires_at: string | null;
+  is_active: boolean;
+  uses_count: number;
+  fee_saved_usd: number;
+  applies_to_models: string[] | null;
+  applies_to_providers: string[] | null;
+  summary: string;
+}
+
+export const promotionsApi = {
+  /** Claim a code. One per account. */
+  redeem: (code: string) => api.post("/promotions/redeem", { code }),
+  /** Everything this account has ever claimed, live and expired. */
+  mine: () => api.get("/promotions").then((r) => ({ ...r, data: asArray<MyPromotion>(r.data) })),
+  /** The one currently being applied, or null. Discounts do not stack. */
+  active: () => api.get("/promotions/active"),
+};
+
+export const adminPromotionsApi = {
+  list: () => api.get("/admin/promotions").then((r) => ({ ...r, data: asArray<Promotion>(r.data) })),
+  get: (id: string) => api.get(`/admin/promotions/${id}`),
+  stats: () => api.get("/admin/promotions/stats"),
+  create: (data: Record<string, unknown>) => api.post("/admin/promotions", data),
+  update: (id: string, data: Record<string, unknown>) => api.patch(`/admin/promotions/${id}`, data),
+  remove: (id: string) => api.delete(`/admin/promotions/${id}`),
+  /** Who claimed it, when, and what it has cost in given-up fees. */
+  redemptions: (id: string) =>
+    api.get(`/admin/promotions/${id}/redemptions`).then((r) => ({ ...r, data: asArray(r.data) })),
+  /** Give it to named accounts, with no code for them to type. */
+  grant: (id: string, data: { emails?: string[]; user_ids?: string[] }) =>
+    api.post(`/admin/promotions/${id}/grant`, data),
+  /** Email the code out. Only for promotions that have one. */
+  email: (id: string, data: { emails: string[]; subject?: string; message?: string }) =>
+    api.post(`/admin/promotions/${id}/email`, data),
+  suggestCode: (prefix = "") =>
+    api.get("/admin/promotions/generate-code", { params: { prefix } }),
+};
+
 export const adminApi = {
   providers: {
     list: () => api.get("/admin/providers"),

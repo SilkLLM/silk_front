@@ -41,6 +41,7 @@ const USER_NAV: NavItem[] = [
   { label: "Provider Hub", href: "/dashboard/provider-hub", icon: <Coins size={17} /> },
   { label: "API Keys",     href: "/dashboard/keys",         icon: <Key size={17} /> },
   { label: "Budgets",      href: "/dashboard/budgets",      icon: <Users size={17} /> },
+  { label: "Promotions",   href: "/dashboard/promotions",   icon: <Gift size={17} /> },
   { label: "Billing",      href: "/dashboard/billing",      icon: <CreditCard size={17} /> },
   { label: "Usage",        href: "/dashboard/usage",        icon: <BarChart2 size={17} /> },
 ];
@@ -52,6 +53,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Top-Ups",     href: "/admin/topups",      icon: <PlusCircle size={17} /> },
   { label: "Alerts",      href: "/admin/alerts",      icon: <ShieldCheck size={17} /> },
   { label: "Credits",     href: "/admin/credits",     icon: <Users size={17} /> },
+  { label: "Promotions",  href: "/admin/promotions",  icon: <Gift size={17} /> },
   { label: "Settings",    href: "/admin/settings",    icon: <SlidersHorizontal size={17} /> },
 ];
 
@@ -62,6 +64,7 @@ const TITLES: Record<string, string> = {
   "/dashboard/provider-hub": "Provider Hub",
   "/dashboard/keys": "API Keys",
   "/dashboard/budgets": "Budgets & Webhooks",
+  "/dashboard/promotions": "Promotions",
   "/dashboard/billing": "Billing",
   "/dashboard/usage": "Usage",
   "/dashboard/notifications": "Notifications",
@@ -71,6 +74,7 @@ const TITLES: Record<string, string> = {
   "/admin/topups": "Top-Ups",
   "/admin/alerts": "Alerts",
   "/admin/credits": "Credits & Users",
+  "/admin/promotions": "Promotions & Discounts",
   "/admin/settings": "Platform Settings",
 };
 

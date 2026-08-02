@@ -190,9 +190,14 @@
   .card-pad { @apply p-5 sm:p-6; }
 
   /* ── Form controls ─────────────────────────────────────────────────────── */
+  /* min-h-10 as well as h-10, because `flex-1` on an input inside a `flex-col`
+     sets flex-basis:0 on the vertical axis and overrides the height outright.
+     That silently collapsed the create fields to ~21px on phones, which is
+     both ugly and below the touch minimum, and it read as a styling quirk
+     rather than the flex rule it actually is. */
   .input {
     @apply w-full bg-surface text-ink border border-line rounded-lg
-           px-3.5 h-10 text-sm placeholder:text-ink-3
+           px-3.5 h-10 min-h-10 text-sm placeholder:text-ink-3
            transition-[border-color,box-shadow] duration-150
            hover:border-line-strong
            focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25

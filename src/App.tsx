@@ -23,6 +23,7 @@ const Callback      = lazy(() => import("@/pages/auth/Callback"));
 const UserDashboard = lazy(() => import("@/pages/user/Dashboard"));
 const ApiKeys       = lazy(() => import("@/pages/user/ApiKeys"));
 const Budgets       = lazy(() => import("@/pages/user/Budgets"));
+const Promotions    = lazy(() => import("@/pages/user/Promotions"));
 const Billing       = lazy(() => import("@/pages/user/Billing"));
 const Usage         = lazy(() => import("@/pages/user/Usage"));
 const ProviderHub   = lazy(() => import("@/pages/user/ProviderHub"));
@@ -35,6 +36,7 @@ const AdminAlerts       = lazy(() => import("@/pages/admin/Alerts"));
 const AdminCredits      = lazy(() => import("@/pages/admin/Credits"));
 const AdminMarketplace  = lazy(() => import("@/pages/admin/Marketplace"));
 const AdminSettings     = lazy(() => import("@/pages/admin/Settings"));
+const AdminPromotions = lazy(() => import("@/pages/admin/AdminPromotions"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -117,6 +119,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<ProtectedRoute><UserDashboard /></ProtectedRoute>} />
         <Route path="/dashboard/keys"    element={<ProtectedRoute><ApiKeys /></ProtectedRoute>} />
         <Route path="/dashboard/budgets"  element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
+        <Route path="/dashboard/promotions" element={<ProtectedRoute><Promotions /></ProtectedRoute>} />
         <Route path="/dashboard/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
         <Route path="/dashboard/usage"   element={<ProtectedRoute><Usage /></ProtectedRoute>} />
         <Route path="/dashboard/provider-hub"  element={<ProtectedRoute><ProviderHub /></ProtectedRoute>} />
@@ -131,6 +134,7 @@ function AppRoutes() {
         <Route path="/admin/topups"     element={<AdminRoute><AdminTopups /></AdminRoute>} />
         <Route path="/admin/alerts"     element={<AdminRoute><AdminAlerts /></AdminRoute>} />
         <Route path="/admin/credits"    element={<AdminRoute><AdminCredits /></AdminRoute>} />
+        <Route path="/admin/promotions" element={<AdminRoute><AdminPromotions /></AdminRoute>} />
         <Route path="/admin/settings"   element={<AdminRoute><AdminSettings /></AdminRoute>} />
 
         {/* Fallback */}

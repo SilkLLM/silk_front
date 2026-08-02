@@ -27,9 +27,9 @@ const VIEWPORTS = [
 const ROUTES = [
   "/", "/docs", "/login",
   "/dashboard", "/dashboard/chat", "/dashboard/usage", "/dashboard/billing",
-  "/dashboard/keys", "/dashboard/budgets", "/dashboard/provider-hub", "/dashboard/notifications",
+  "/dashboard/keys", "/dashboard/budgets", "/dashboard/promotions", "/dashboard/provider-hub", "/dashboard/notifications",
   "/admin/providers", "/admin/models", "/admin/marketplace", "/admin/topups",
-  "/admin/alerts", "/admin/credits", "/admin/settings",
+  "/admin/alerts", "/admin/credits", "/admin/promotions", "/admin/settings",
 ];
 
 // Fixtures shaped like the real API, with deliberately long strings so that
@@ -93,6 +93,43 @@ const FIXTURES = {
     daily_limit_usd: 5, declared_budget_usd: i === 0 ? 50 : 0, consumed_usd_total: 12.5,
     status: "active", created_at: new Date().toISOString(), last_used: new Date().toISOString(),
     earned_credits_total: 3.21, requests_served: 1234, provider_cost_served: 4.3,
+  })),
+  "/promotions/active": {
+    id: "r1", promotion_name: "Launch week, extended for early customers",
+    description: "20% off our fees", discount_percent: 20,
+    redeemed_at: new Date().toISOString(), expires_at: new Date().toISOString(),
+    is_active: true, uses_count: 1284, fee_saved_usd: 12.3456,
+    applies_to_models: null, applies_to_providers: null,
+    summary: "20% off the SilkLLM fee until 30 Jun 2026. Your credit balance and the provider's cost are unchanged; only our margin is discounted.",
+  },
+  "/promotions": Array.from({ length: 3 }, (_, i) => ({
+    id: `r${i}`, promotion_name: "Launch week, extended for early customers",
+    description: "20% off our fees", discount_percent: 20 + i * 10,
+    redeemed_at: new Date().toISOString(),
+    expires_at: i === 2 ? null : new Date().toISOString(),
+    is_active: i !== 2, uses_count: 1284, fee_saved_usd: 12.3456,
+    applies_to_models: i === 1 ? ["gpt-4o-mini"] : null, applies_to_providers: null,
+    summary: "20% off the SilkLLM fee until 30 Jun 2026. Your credit balance and the provider's cost are unchanged; only our margin is discounted.",
+  })),
+  "/admin/promotions/stats": {
+    total_promotions: 6, live_promotions: 3, codes: 4, direct_grants: 2,
+    total_redemptions: 128, distinct_users: 97, total_uses: 5421,
+    total_fee_given_up_usd: 812.34,
+    expiring_soon: [{ id: "p1", name: "Launch week", code: "LAUNCH-ABC123", expires_at: new Date().toISOString() }],
+  },
+  "/admin/promotions": Array.from({ length: 5 }, (_, i) => ({
+    id: `p${i}`, code: i % 2 ? null : `LAUNCH-${i}ABCDEFG`,
+    name: "Launch week for early customers in every region",
+    description: "Twenty percent off the SilkLLM fee for the first month of use.",
+    discount_percent: 20 + i * 5, max_redemptions: i ? 100 : null,
+    redemption_count: 42, seats_left: i ? 58 : null,
+    starts_at: null, expires_at: i === 4 ? null : new Date().toISOString(),
+    duration_days: i ? 30 : null,
+    restricted_user_ids: null, restricted_emails: i === 3 ? [LONG_EMAIL] : null,
+    allowed_models: i === 2 ? ["gpt-4o-mini", "gpt-4o"] : null, allowed_providers: null,
+    is_active: i !== 4, created_at: new Date().toISOString(),
+    unavailable_reason: i === 4 ? "This promotion is no longer available." : null,
+    total_fee_saved_usd: 123.45, total_uses: 987,
   })),
   "/keys/allocation": { balance: 100, allocated: 42.5, available: 57.5 },
   "/budgets": Array.from({ length: 4 }, (_, i) => ({

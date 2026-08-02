@@ -56,7 +56,7 @@ const KEY_SHAPES = {
   empty: [],
 };
 
-async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200, budgets = POOL_SHAPES.full, hooks = HOOK_SHAPES.healthy, allocationSnapshot = { balance: 100, allocated: 0, available: 100 } } = {}) {
+async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200, budgets = POOL_SHAPES.full, hooks = HOOK_SHAPES.healthy, allocationSnapshot = { balance: 100, allocated: 0, available: 100 }, promotions = PROMO_SHAPES.full, activePromotion = PROMO_SHAPES.full[0], adminPromotions = ADMIN_PROMO_SHAPES.full, redeemStatus = 201 } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -115,6 +115,16 @@ async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200, bud
       return json({ total: 0, entries: [] });
     }
     if (p === "/api/keys/allocation") return json(allocationSnapshot);
+    if (p === "/api/promotions/active") return json(activePromotion);
+    if (p === "/api/promotions/redeem") {
+      return redeemStatus === 201
+        ? json({ ...PROMO_SHAPES.full[0], id: "new" }, 201)
+        : json({ error: { code: "promotion_already_redeemed", message: "You have already redeemed this code." } }, 400);
+    }
+    if (p === "/api/promotions") return json(promotions);
+    if (p === "/api/admin/promotions/stats") return json(ADMIN_PROMO_STATS);
+    if (/^\/api\/admin\/promotions\/[^/]+\/redemptions$/.test(p)) return json(ADMIN_REDEMPTIONS);
+    if (p === "/api/admin/promotions") return json(adminPromotions);
     if (/^\/api\/keys\/[^/]+\/permanent$/.test(p) && req.method() === "DELETE") {
       return req.respond({ status: 204, body: "" });
     }
@@ -181,6 +191,65 @@ const HOOK_SHAPES = {
   empty: [],
   notAList: {},
 };
+
+/**
+ * Promotion shapes, including the degraded ones. `notAList` is the important
+ * one: an object body is truthy, so every `(data || []).map` throws on it.
+ */
+const PROMO_SHAPES = {
+  full: [{
+    id: "r1", promotion_name: "Launch week", description: "20% off our fees",
+    discount_percent: 20, redeemed_at: new Date().toISOString(),
+    expires_at: new Date().toISOString(), is_active: true,
+    uses_count: 12, fee_saved_usd: 1.2345,
+    applies_to_models: null, applies_to_providers: null,
+    summary: "20% off the SilkLLM fee. Your credit balance is unchanged.",
+  }],
+  expired: [{
+    id: "r2", promotion_name: "Old campaign", description: null,
+    discount_percent: 50, redeemed_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() - 86400000).toISOString(), is_active: false,
+    uses_count: 0, fee_saved_usd: 0,
+    applies_to_models: null, applies_to_providers: null, summary: "Ended.",
+  }],
+  empty: [],
+  notAList: {},
+};
+
+const ADMIN_PROMO_SHAPES = {
+  full: [{
+    id: "p1", code: "LAUNCH-ABC123", name: "Launch week", description: "20% off",
+    discount_percent: 20, max_redemptions: 100, redemption_count: 42, seats_left: 58,
+    starts_at: null, expires_at: new Date().toISOString(), duration_days: 30,
+    restricted_user_ids: null, restricted_emails: null,
+    allowed_models: null, allowed_providers: null, is_active: true,
+    created_at: new Date().toISOString(), unavailable_reason: null,
+    total_fee_saved_usd: 12.34, total_uses: 98,
+  }],
+  directGrant: [{
+    id: "p2", code: null, name: "Partner rate", description: null,
+    discount_percent: 40, max_redemptions: null, redemption_count: 3, seats_left: null,
+    starts_at: null, expires_at: null, duration_days: null,
+    restricted_user_ids: null, restricted_emails: null,
+    allowed_models: null, allowed_providers: null, is_active: true,
+    created_at: new Date().toISOString(), unavailable_reason: null,
+    total_fee_saved_usd: 4.5, total_uses: 12,
+  }],
+  empty: [],
+  notAList: {},
+};
+
+const ADMIN_PROMO_STATS = {
+  total_promotions: 2, live_promotions: 1, codes: 1, direct_grants: 1,
+  total_redemptions: 45, distinct_users: 40, total_uses: 110,
+  total_fee_given_up_usd: 16.84, expiring_soon: [],
+};
+
+const ADMIN_REDEMPTIONS = [{
+  id: "x1", user_id: "u1", user_email: "someone@example.com", user_name: "Someone",
+  discount_percent: 20, redeemed_at: new Date().toISOString(),
+  expires_at: null, is_active: true, uses_count: 9, fee_saved_usd: 1.23,
+}];
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -388,6 +457,100 @@ for (const [shape, hooks] of Object.entries(HOOK_SHAPES)) {
   const confirms = await page.evaluate(() => document.body.innerText.includes("for good"));
   record("deleting asks for confirmation first", confirms);
   record("the delete flow raises no page error", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── Promotions: every shape, user side and admin side ───────────────────────
+for (const [shape, promotions] of Object.entries(PROMO_SHAPES)) {
+  const active = Array.isArray(promotions) ? promotions[0] ?? null : null;
+  const { page, errors } = await newPage(browser, { promotions, activePromotion: active });
+  await page.goto(`${BASE}/dashboard/promotions`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  record(`promotions page renders with a "${shape}" response`, errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+for (const [shape, adminPromotions] of Object.entries(ADMIN_PROMO_SHAPES)) {
+  const { page, errors } = await newPage(browser, { adminPromotions });
+  await page.goto(`${BASE}/admin/promotions`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  record(`admin promotions renders with a "${shape}" response`, errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── A customer must be told what a code does, and what it does not ──────────
+{
+  const { page, errors } = await newPage(browser);
+  await page.goto(`${BASE}/dashboard/promotions`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  const text = await page.evaluate(() => document.body.innerText);
+  record("the page says a discount is off the fee, not credit",
+         /fee/i.test(text) && /balance/i.test(text));
+  record("the active discount is shown with what it has saved", /saved/i.test(text));
+  record("the promotions page raises no page error", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── Redeeming, and a refusal that has to read clearly ───────────────────────
+{
+  const { page, errors } = await newPage(browser, { promotions: PROMO_SHAPES.empty, activePromotion: null });
+  await page.goto(`${BASE}/dashboard/promotions`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.type('input[placeholder^="Enter your promo code"]', "launch-abc");
+  const upper = await page.evaluate(() =>
+    document.querySelector('input[placeholder^="Enter your promo code"]')?.value);
+  record("a typed code is upper-cased as it is entered", upper === "LAUNCH-ABC", String(upper));
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Redeem")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  const after = await page.evaluate(() => document.body.innerText);
+  record("a successful redemption explains the benefit", /applied/i.test(after));
+  record("redeeming raises no page error", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+{
+  const { page } = await newPage(browser, {
+    promotions: PROMO_SHAPES.empty, activePromotion: null, redeemStatus: 400,
+  });
+  await page.goto(`${BASE}/dashboard/promotions`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.type('input[placeholder^="Enter your promo code"]', "USED");
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Redeem")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  const shown = await page.evaluate(() => document.body.innerText);
+  record("a refused code shows the server's reason",
+         /already redeemed/i.test(shown), shown.slice(0, 80));
+  await page.close();
+}
+
+// ── The admin form must refuse a discount above 100% of the fee ─────────────
+{
+  const { page, errors } = await newPage(browser, { adminPromotions: ADMIN_PROMO_SHAPES.empty });
+  await page.goto(`${BASE}/admin/promotions`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("New promotion"))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 500));
+  await page.type('input[placeholder="Launch week"]', "Too generous");
+  await page.evaluate(() => {
+    const input = [...document.querySelectorAll('input[type=number]')][0];
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "150");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const blocked = await page.evaluate(() =>
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Create promotion"))?.disabled === true);
+  const explained = await page.evaluate(() =>
+    document.body.innerText.includes("between 1 and 100 percent"));
+  record("a discount above 100% of the fee is blocked in the admin form", blocked && explained,
+         `blocked=${blocked} explained=${explained}`);
+  record("the admin promotion form raises no page error", errors.length === 0, errors[0] || "");
   await page.close();
 }
 

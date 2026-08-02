@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 import {
   Copy, CheckCircle, BookOpen, Key, Zap, Layers, Code2, AlertTriangle,
   ArrowLeft, ArrowRight, ChevronDown, Coins, Gift, Image as ImageIcon,
-  MessageSquare, Search, Wallet, ShieldCheck,
+  MessageSquare, Search, Wallet, ShieldCheck, BadgePercent,
 } from "lucide-react";
 import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
@@ -86,6 +86,29 @@ client.delete_key(key.id)   # gone, with its activity log`,
 
   jsDeleteKey: `await client.revokeKey(key.id);   // stops working, still listed, history kept
 await client.deleteKey(key.id);   // gone, with its activity log`,
+
+  pyPromo: `# Redeem a code. One per account.
+promo = client.redeem_promo("LAUNCH-ABC123")
+print(promo["summary"])
+# "All SilkLLM fees waived until 01 Sep 2026. Your credit balance and the
+#  provider's cost are unchanged; only our margin is discounted."
+
+client.active_promotion()   # the one currently applying, or None
+client.promotions()         # everything ever claimed, live and expired`,
+
+  jsPromo: `// Redeem a code. One per account.
+const promo = await client.redeemPromo("LAUNCH-ABC123");
+console.log(promo.summary);
+// "All SilkLLM fees waived until 01 Sep 2026. Your credit balance and the
+//  provider's cost are unchanged; only our margin is discounted."
+
+await client.activePromotion();  // the one currently applying, or null
+await client.promotions();       // everything ever claimed, live and expired`,
+
+  curlPromo: `curl -X POST https://silkllm-backend.169.58.53.167.nip.io/api/promotions/redeem \
+  -H "Authorization: Bearer silk_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "LAUNCH-ABC123"}'`,
 
   pyKeyControls: `# Every control is optional. A key with none of them behaves
 # exactly as keys always have.
@@ -808,6 +831,88 @@ const SECTIONS = [
         <Callout>
           Removing a limit uses the <Pill>clear_spend_limit</Pill> flag rather than sending null,
           because an omitted field has to keep meaning "leave this as it is".
+        </Callout>
+      </>
+    ),
+  },
+  {
+    id: "promotions", label: "Promotions", icon: <BadgePercent size={14} />,
+    body: (
+      <>
+        <Para>
+          A promotion discounts <strong>SilkLLM's own fee</strong>, the margin added on top of what
+          a request costs to serve. It is worth being precise about this, because a discount and a
+          credit top-up are easy to confuse and only one of them is what this is.
+        </Para>
+
+        <DocTable
+          headers={["What", "Does a promotion change it?"]}
+          rows={[
+            ["Your credit balance", "No. Redeeming a code adds no credit and removes none."],
+            ["The provider's cost", "No. That is what the model actually cost, and you always pay it."],
+            ["The SilkLLM fee", "Yes. This is the only thing a discount touches."],
+          ]}
+        />
+
+        <Callout>
+          At 100% off you pay exactly what the request cost to serve, and not a penny less. The
+          floor is the real outlay: normally the provider's charge, or the key owner's earnings when
+          a marketplace key served the request. A discount can take our margin to zero, never past
+          it.
+        </Callout>
+
+        <H3>Redeeming a code</H3>
+        <LangTabs python={CODE.pyPromo} javascript={CODE.jsPromo} />
+        <Para>
+          Or straight from the API:
+        </Para>
+        <CodeBlock code={CODE.curlPromo} lang="bash" />
+
+        <H3>The rules</H3>
+        <DocTable
+          headers={["Rule", "What it means"]}
+          rows={[
+            ["Once per account", "A code can be redeemed a single time by any one account."],
+            ["No stacking", "Holding two discounts applies the more generous one, not the sum."],
+            ["Limited seats", "Some codes stop working once a set number of accounts have claimed them."],
+            ["Date windows", "Some are only valid between two dates."],
+            ["Benefit duration", "Some run for a set number of days after you redeem, or until the campaign ends, whichever is sooner."],
+            ["Named accounts", "Some are reserved for specific customers and will not work for anyone else."],
+            ["Scoped", "Some only discount certain models or providers; anything else is charged normally."],
+          ]}
+        />
+        <Para>
+          The <Pill>summary</Pill> on the redemption response says in plain English which of these
+          apply to the code you just used, so an application can show a customer what they got
+          without working it out from the fields.
+        </Para>
+
+        <H3>Seeing the effect</H3>
+        <Para>
+          A discounted request reports both figures, so the saving is never something you have to
+          infer. The ledger entry carries the same detail, which is what makes a discounted month
+          reconcilable afterwards.
+        </Para>
+        <CodeBlock lang="json" code={`{
+  "cost_usd": 0.000095,
+  "gross_cost_usd": 0.0001045,
+  "fee_saved_usd": 0.0000095,
+  "discount_percent": 100
+}`} />
+
+        <DocTable
+          headers={["Endpoint", "Purpose"]}
+          rows={[
+            ["POST /api/promotions/redeem", "Redeem a code. Once per account."],
+            ["GET /api/promotions", "Every promotion on the account, live and expired."],
+            ["GET /api/promotions/active", "The discount currently applying, or null."],
+          ]}
+        />
+
+        <Callout>
+          Redemption attempts are rate limited per account. A promo code is a secret worth money, and
+          an unknown code and a code reserved for somebody else answer identically, so the endpoint
+          cannot be used to work out which codes exist.
         </Callout>
       </>
     ),
