@@ -583,7 +583,7 @@ export default function Chat() {
         {/* Conversation pane */}
         <div className="flex-1 min-w-0 flex flex-col bg-page">
           {/* Pane header */}
-          <div className="flex items-center gap-2 px-3 sm:px-4 h-14 shrink-0 border-b border-line bg-surface">
+          <div className="flex items-center gap-2 gutter h-14 shrink-0 border-b border-line bg-surface">
             <IconButton label="Your chats" className="md:hidden relative" onClick={() => setDrawerOpen(true)}>
               <PanelLeft size={18} />
               {store.conversations.length > 0 && (
@@ -620,7 +620,7 @@ export default function Chat() {
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
-            <div className="mx-auto w-full max-w-3xl px-4 py-6 space-y-5">
+            <div className="mx-auto w-full max-w-3xl gutter py-6 space-y-5">
               {!active || active.messages.length === 0 ? (
                 <div className="pt-16">
                   <EmptyState
@@ -688,7 +688,7 @@ export default function Chat() {
 
           {/* Composer */}
           <div className="shrink-0 border-t border-line bg-surface">
-            <div className="mx-auto w-full max-w-3xl px-3 sm:px-4 py-3">
+            <div className="mx-auto w-full max-w-3xl gutter py-3">
               {/* Mode switcher */}
               <div className="flex items-center gap-1 mb-2.5 overflow-x-auto scroll-x">
                 {MODES.map((md) => (

@@ -463,7 +463,7 @@ export default function DashboardLayout({ children, fullBleed }: {
             shell as a whole opts out of it. */}
         <main className={clsx("flex-1 min-h-0 selectable", fullBleed ? "overflow-hidden" : "overflow-y-auto")}>
           {fullBleed ? children : (
-            <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8 px-safe pb-safe">
+            <div className="gutter py-6 lg:py-8 pb-safe">
               <div className="mx-auto w-full max-w-[1180px] space-y-6">{children}</div>
             </div>
           )}

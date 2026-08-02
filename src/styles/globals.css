@@ -251,9 +251,33 @@
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
   .pl-safe { padding-left: env(safe-area-inset-left); }
   .pr-safe { padding-right: env(safe-area-inset-right); }
-  .px-safe { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
   .h-safe-top { height: env(safe-area-inset-top); }
   .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
+
+  /* ── Page gutter ────────────────────────────────────────────────────────
+     The horizontal breathing room every page sits inside.
+
+     This exists because combining `px-4` with a separate safe-area class does
+     not work: both are utilities, the safe-area one wins on source order, and
+     env(safe-area-inset-left) is 0 on any device without a notch. The result
+     was content flush against the screen edge. Taking the max means the inset
+     can only ever add to the gutter, never replace it. */
+  .gutter {
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+  }
+  @media (min-width: 640px) {
+    .gutter {
+      padding-left: max(1.75rem, env(safe-area-inset-left));
+      padding-right: max(1.75rem, env(safe-area-inset-right));
+    }
+  }
+  @media (min-width: 1024px) {
+    .gutter {
+      padding-left: max(2.5rem, env(safe-area-inset-left));
+      padding-right: max(2.5rem, env(safe-area-inset-right));
+    }
+  }
 
   /* ── Touch targets ──────────────────────────────────────────────────────
      Grows a control's hit area to roughly 44px with a transparent
@@ -279,6 +303,48 @@
      hovers on neighbouring elements, so it only applies to touch. */
   @media (pointer: fine) {
     .tap-target::before { display: none; }
+  }
+
+  /* ── Editorial surfaces ─────────────────────────────────────────────────
+     The marketing pages lean on translucency and light rather than the boxed,
+     hard-bordered cards the dashboard uses. A dashboard card has to be a
+     precise container for data; a landing panel only has to feel like a pane
+     of glass over the gradient behind it. */
+  .glass {
+    background: rgb(var(--c-surface) / 0.66);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid rgb(var(--c-ink) / 0.07);
+  }
+  .dark .glass {
+    background: rgb(var(--c-surface) / 0.58);
+    border-color: rgb(255 255 255 / 0.08);
+  }
+
+  /* A hairline that fades out rather than boxing content in. */
+  .rule-fade {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(var(--c-ink) / 0.12), transparent);
+  }
+
+  /* Display type that carries the brand gradient instead of a flat fill. */
+  .text-gradient {
+    background-image: linear-gradient(135deg,
+      rgb(var(--c-ink)) 0%,
+      rgb(var(--c-ink)) 40%,
+      rgb(var(--c-accent)) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Slow drifting blobs behind the hero. Kept on the compositor by animating
+     transform only, and switched off entirely by the reduced-motion rule. */
+  .aurora { animation: drift 22s ease-in-out infinite alternate; will-change: transform; }
+  .aurora-slow { animation: drift 34s ease-in-out infinite alternate-reverse; will-change: transform; }
+  @keyframes drift {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to   { transform: translate3d(4%, -6%, 0) scale(1.12); }
   }
 
   /* Chrome that should never be selectable or draggable, the way native UI

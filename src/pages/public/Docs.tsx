@@ -667,7 +667,7 @@ export default function Docs() {
 
       <div id="doc-top" className="scroll-mt-24" />
 
-      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 px-safe pt-24 pb-16">
+      <div className="mx-auto max-w-[1180px] gutter pt-24 pb-16">
         <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-10">
           {/* Desktop sidebar */}
           <aside className="hidden lg:block">

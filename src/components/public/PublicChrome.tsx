@@ -89,7 +89,7 @@ export function PublicNav() {
             : "bg-transparent border-b border-transparent",
         )}
       >
-        <nav className="mx-auto max-w-[1180px] h-16 flex items-center gap-3 px-4 sm:px-6 px-safe">
+        <nav className="mx-auto max-w-[1180px] h-16 flex items-center gap-3 gutter">
           <Link to="/" className="shrink-0" aria-label="SilkLLM home">
             <Logo size={30} wordClassName="text-[17px]" />
           </Link>
@@ -197,7 +197,7 @@ export function PublicFooter() {
   const year = new Date().getFullYear();
   return (
     <footer className="border-t border-line bg-sunken">
-      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 px-safe py-12 sm:py-16">
+      <div className="mx-auto max-w-[1180px] gutter py-12 sm:py-16">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div className="max-w-xs">
             <Logo size={30} wordClassName="text-[17px]" />
