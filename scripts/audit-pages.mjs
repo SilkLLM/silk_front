@@ -554,6 +554,70 @@ for (const [shape, adminPromotions] of Object.entries(ADMIN_PROMO_SHAPES)) {
   await page.close();
 }
 
+// ── The maintenance screen: shown for an outage, and only for an outage ─────
+{
+  // Every API call fails the way a dead backend fails: no response at all.
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewport({ width: 1280, height: 900 });
+  await page.evaluateOnNewDocument(() => {
+    localStorage.setItem("silk_token", "test-token");
+    localStorage.setItem("silk_theme", "dark");
+    localStorage.setItem("silk_install_dismissed_at", String(Date.now()));
+  });
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    const url = new URL(req.url());
+    if (url.pathname.startsWith("/api/") || url.pathname === "/health") return req.abort();
+    if (url.origin !== new URL(BASE).origin) return req.abort();
+    req.continue();
+  });
+  await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded" });
+  await new Promise((r) => setTimeout(r, 2500));
+  const text = await page.evaluate(() => document.body.innerText);
+  record("an unreachable backend shows the maintenance screen",
+         /be back shortly|you are offline/i.test(text), text.slice(0, 90));
+  record("the maintenance screen reassures rather than alarms",
+         /nothing is lost|balance/i.test(text) || /offline/i.test(text));
+  record("the maintenance screen raises no page error", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+{
+  // A 404 means the server is up and answered. Covering the app for that would
+  // hide real errors behind a reassuring screen, so it must NOT trigger.
+  const { page } = await newPage(browser);
+  await page.setRequestInterception(false);
+  const p2 = await browser.newPage();
+  await p2.setViewport({ width: 1280, height: 900 });
+  await p2.evaluateOnNewDocument(() => {
+    localStorage.setItem("silk_token", "test-token");
+    localStorage.setItem("silk_install_dismissed_at", String(Date.now()));
+  });
+  await p2.setRequestInterception(true);
+  p2.on("request", (req) => {
+    const url = new URL(req.url());
+    if (url.pathname.startsWith("/api/")) {
+      if (url.pathname === "/api/auth/me") {
+        return req.respond({ status: 200, contentType: "application/json",
+          body: JSON.stringify(USER) });
+      }
+      return req.respond({ status: 404, contentType: "application/json",
+        body: JSON.stringify({ detail: "Not found" }) });
+    }
+    if (url.origin !== new URL(BASE).origin) return req.abort();
+    req.continue();
+  });
+  await p2.goto(`${BASE}/dashboard`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const text = await p2.evaluate(() => document.body.innerText);
+  record("a 404 does not trigger the maintenance screen",
+         !/be back shortly/i.test(text), text.slice(0, 70));
+  await p2.close();
+  await page.close();
+}
+
 await browser.close();
 
 const failed = results.filter((r) => !r.pass);

@@ -17,7 +17,7 @@
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BadgePercent, Ban, Check, Clock, Gift, Mail, Pencil,
+  AlertTriangle, BadgePercent, Ban, Bell, Check, Clock, Gift, Mail, Pencil,
   Plus, Send, Sparkles, Tag, Trash2, TrendingDown, Users,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -381,14 +381,104 @@ function RedemptionsDialog({ promo, onClose }: { promo: Promotion | null; onClos
 }
 
 /** Email a code out, or grant a discount directly. */
+interface SendRecipient {
+  email: string;
+  has_account: boolean;
+  emailed: boolean;
+  notified: boolean;
+  delivered: boolean;
+  reason: string | null;
+}
+
+/** The outcome of a bulk send, recipient by recipient. */
+function SendReport({ result }: { result: any }) {
+  const rows: SendRecipient[] = result?.recipients || [];
+  const failed = rows.filter((r) => !r.delivered);
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-lg border border-line bg-sunken px-3 py-2.5">
+          <p className="text-2xs uppercase tracking-wide text-ink-3">Reached</p>
+          <p className="text-sm font-medium text-ink num mt-0.5">
+            {result.delivered} of {result.total}
+          </p>
+        </div>
+        <div className="rounded-lg border border-line bg-sunken px-3 py-2.5">
+          <p className="text-2xs uppercase tracking-wide text-ink-3">Emailed</p>
+          <p className="text-sm font-medium text-ink num mt-0.5">{result.emailed}</p>
+        </div>
+        <div className="rounded-lg border border-line bg-sunken px-3 py-2.5">
+          <p className="text-2xs uppercase tracking-wide text-ink-3">Notified</p>
+          <p className="text-sm font-medium text-ink num mt-0.5">{result.notified}</p>
+        </div>
+      </div>
+
+      {failed.length > 0 && (
+        <Callout tone="warning" icon={<AlertTriangle size={15} />}>
+          {failed.length} of {result.total} did not receive the code at all. Everyone else got it by
+          email, in their notifications, or both.
+        </Callout>
+      )}
+
+      <div className="rounded-lg border border-line overflow-hidden">
+        <div className="scroll-x max-h-72 overflow-y-auto">
+          <table className="table-shell">
+            <thead>
+              <tr>
+                <th>Recipient</th>
+                <th>Email</th>
+                <th>Notification</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.email}>
+                  <td className="max-w-[220px]">
+                    <p className="text-xs text-ink truncate">{r.email}</p>
+                    {!r.has_account && <p className="text-2xs text-ink-3">No account</p>}
+                  </td>
+                  <td>
+                    {r.emailed
+                      ? <Badge tone="success"><Check size={10} /> Sent</Badge>
+                      : <Badge tone="neutral">Not sent</Badge>}
+                  </td>
+                  <td>
+                    {r.notified
+                      ? <Badge tone="success"><Check size={10} /> Added</Badge>
+                      : <Badge tone="neutral">n/a</Badge>}
+                  </td>
+                  <td>
+                    {r.delivered
+                      ? <Badge tone="brand">Reached</Badge>
+                      : <Badge tone="warning" icon={<AlertTriangle size={10} />}>Not reached</Badge>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {failed.some((r) => r.reason) && (
+        <p className="text-2xs text-ink-3 leading-relaxed">
+          {failed.find((r) => r.reason)?.reason}. An address with no SilkLLM account can only be
+          reached by email, so if email is unavailable there is nowhere else to put the code.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ReachDialog({ promo, onClose }: { promo: Promotion | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [emails, setEmails] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [report, setReport] = useState<any>(null);
 
   React.useEffect(() => {
-    if (promo) { setEmails(""); setSubject(""); setMessage(""); }
+    if (promo) { setEmails(""); setSubject(""); setMessage(""); setReport(null); }
   }, [promo]);
 
   const list = splitList(emails);
@@ -405,8 +495,14 @@ function ReachDialog({ promo, onClose }: { promo: Promotion | null; onClose: () 
         : adminPromotionsApi.grant(promo!.id, { emails: list }).then((r) => r.data),
     onSuccess: (data: any) => {
       if (isCode) {
-        toast.success(`Sent to ${data.sent} of ${data.sent + data.failed}.`);
-      } else {
+        // The dialog stays open showing the breakdown. A toast cannot say which
+        // three of fifty failed, and that is the only part worth acting on.
+        setReport(data);
+        if (data.failed === 0) toast.success(`All ${data.total} received the code.`);
+        else toast.error(`${data.delivered} of ${data.total} reached. See the breakdown.`);
+        return;
+      }
+      {
         const granted = data.granted?.length ?? 0;
         const skipped = data.skipped?.length ?? 0;
         toast.success(
@@ -433,20 +529,25 @@ function ReachDialog({ promo, onClose }: { promo: Promotion | null; onClose: () 
       }
       icon={isCode ? <Mail size={17} /> : <Gift size={17} />}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            icon={isCode ? <Send size={15} /> : <Gift size={15} />}
-            loading={send.isPending}
-            disabled={!list.length}
-            onClick={() => send.mutate()}
-          >
-            {isCode ? `Send to ${list.length || 0}` : `Grant to ${list.length || 0}`}
-          </Button>
-        </>
+        report ? (
+          <Button variant="primary" onClick={onClose}>Done</Button>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              icon={isCode ? <Send size={15} /> : <Gift size={15} />}
+              loading={send.isPending}
+              disabled={!list.length}
+              onClick={() => send.mutate()}
+            >
+              {isCode ? `Send to ${list.length || 0}` : `Grant to ${list.length || 0}`}
+            </Button>
+          </>
+        )
       }
     >
+      {report ? <SendReport result={report} /> : (
       <div className="space-y-4">
         <Field
           label="Email addresses"
@@ -481,6 +582,14 @@ function ReachDialog({ promo, onClose }: { promo: Promotion | null; onClose: () 
           </>
         )}
 
+        {isCode && (
+          <Callout tone="info" icon={<Bell size={15} />}>
+            The code goes out by email <em>and</em> as an in-app notification. Email can fail for
+            reasons nobody controls, so anyone with a SilkLLM account still finds the code in their
+            notifications. You will see exactly who received it by which route.
+          </Callout>
+        )}
+
         {!isCode && (
           <Callout tone="info" icon={<Gift size={15} />}>
             The discount applies immediately, on the account's very next request. Accounts that
@@ -488,6 +597,7 @@ function ReachDialog({ promo, onClose }: { promo: Promotion | null; onClose: () 
           </Callout>
         )}
       </div>
+      )}
     </Modal>
   );
 }

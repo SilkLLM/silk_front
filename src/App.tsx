@@ -7,7 +7,7 @@
 
 // File: silkllm-frontend/src/App.tsx
 
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
@@ -22,6 +22,7 @@ const Login         = lazy(() => import("@/pages/auth/Login"));
 const Callback      = lazy(() => import("@/pages/auth/Callback"));
 const UserDashboard = lazy(() => import("@/pages/user/Dashboard"));
 const ApiKeys       = lazy(() => import("@/pages/user/ApiKeys"));
+const ServiceDown   = lazy(() => import("@/components/ServiceDown"));
 const Budgets       = lazy(() => import("@/pages/user/Budgets"));
 const Promotions    = lazy(() => import("@/pages/user/Promotions"));
 const Billing       = lazy(() => import("@/pages/user/Billing"));
@@ -144,13 +145,48 @@ function AppRoutes() {
   );
 }
 
+/**
+ * Swap the whole app for a maintenance screen while the backend is unreachable.
+ *
+ * Held here rather than per page, because an outage is not something any one
+ * screen can sensibly handle, and a half-rendered dashboard with every panel
+ * showing its own error is exactly the "something is badly wrong" impression
+ * this exists to avoid.
+ *
+ * It clears itself: any successful response anywhere in the app fires
+ * `silk:service-up`, and the screen polls /health on its own besides.
+ */
+function ServiceGate({ children }: { children: React.ReactNode }) {
+  const [down, setDown] = useState(false);
+
+  useEffect(() => {
+    const goDown = () => setDown(true);
+    const goUp = () => setDown(false);
+    window.addEventListener("silk:service-down", goDown);
+    window.addEventListener("silk:service-up", goUp);
+    return () => {
+      window.removeEventListener("silk:service-down", goDown);
+      window.removeEventListener("silk:service-up", goUp);
+    };
+  }, []);
+
+  if (!down) return <>{children}</>;
+  return (
+    <Suspense fallback={null}>
+      <ServiceDown onRecovered={() => setDown(false)} />
+    </Suspense>
+  );
+}
+
 export default function App() {
   const authState = useAuthState();
   return (
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={authState}>
         <BrowserRouter>
-          <AppRoutes />
+          <ServiceGate>
+            <AppRoutes />
+          </ServiceGate>
           <ThemedToaster />
         </BrowserRouter>
       </AuthContext.Provider>

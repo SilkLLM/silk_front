@@ -36,11 +36,42 @@ export function notifyNeedCredit(detail?: string) {
   window.dispatchEvent(new CustomEvent("silk:need-credit", { detail }));
 }
 
+/**
+ * Announce that the backend could not be reached, so the app can show a
+ * maintenance screen instead of a broken one.
+ *
+ * Only two things count as unreachable: a request that never got an answer at
+ * all, and a gateway status the platform returns while a service is starting or
+ * gone. A 400 or a 404 means the server is up and answered, and treating those
+ * as an outage would hide real errors behind a reassuring page.
+ */
+export function notifyServiceDown() {
+  window.dispatchEvent(new CustomEvent("silk:service-down"));
+}
+
+export function notifyServiceUp() {
+  window.dispatchEvent(new CustomEvent("silk:service-up"));
+}
+
+const GATEWAY_STATUSES = [502, 503, 504];
+
 // ── Response interceptor: handle 401 (auth) and 402 (out of credit) ─────────
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Any successful answer means the service is up, which is how the
+    // maintenance screen clears itself without a reload.
+    notifyServiceUp();
+    return response;
+  },
   (error) => {
     const status = error.response?.status;
+    // No response at all means the request never reached a server: DNS, TLS, a
+    // dropped connection, or the browser being offline. Axios reports a
+    // cancelled request the same way, so those are excluded explicitly.
+    const noAnswer = !error.response && error.code !== "ERR_CANCELED";
+    if (noAnswer || GATEWAY_STATUSES.includes(status)) {
+      notifyServiceDown();
+    }
     if (status === 401) {
       localStorage.removeItem("silk_token");
       window.location.href = "/login";
