@@ -3,7 +3,7 @@
  * The overview page. Leads with the one number that matters (balance), then
  * supporting stats, then spend over time, then the catalogue.
  *
- * The spend chart is a single series, so it carries no legend — the panel title
+ * The spend chart is a single series, so it carries no legend - the panel title
  * already names what is plotted. Identity for the model catalogue comes from
  * labels and provider names, never from colour alone.
  */
@@ -80,7 +80,7 @@ function BalanceHero({ spent7d }: { spent7d: number }) {
               : <Badge tone="success"><Check size={10} /> Active</Badge>}
             <span className="text-xs text-ink-3">
               {daysLeft !== null && Number.isFinite(daysLeft)
-                ? `≈ ${daysLeft < 1 ? "under a day" : `${Math.floor(daysLeft)} days`} at your current rate`
+                ? `~ ${daysLeft < 1 ? "under a day" : `${Math.floor(daysLeft)} days`} at your current rate`
                 : "USD · never expires"}
             </span>
           </div>
@@ -200,7 +200,7 @@ function SpendChart({ entries, range, onRange }: {
 
   const data = useMemo(() => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "7d" ? 7 : 30) * 86_400_000;
-    // Roll individual requests up to a daily total — a point per request is noise.
+    // Roll individual requests up to a daily total - a point per request is noise.
     const byDay = new Map<string, number>();
     for (const e of entries) {
       const ts = new Date(e.created_at).getTime();
@@ -303,9 +303,14 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
 
   const toggle = (id: string) => setOpen((prev) => {
     const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     return next;
   });
+
+  const allOpen = providers.length > 0 && open.size === providers.length;
+  const toggleAll = () =>
+    setOpen(allOpen ? new Set() : new Set(providers.map((p) => p.id)));
 
   if (loading) {
     return (
@@ -330,20 +335,27 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
       title="Providers & models"
       description="Everything reachable with your key right now."
       icon={<Server size={15} />}
-      actions={<Badge tone="neutral">{providers.length} providers · {(models || []).length} models</Badge>}
+      actions={
+        <div className="flex items-center gap-3">
+          <Badge tone="neutral">{providers.length} providers, {(models || []).length} models</Badge>
+          <button onClick={toggleAll} className="text-xs text-accent-ink hover:underline whitespace-nowrap">
+            {allOpen ? "Collapse all" : "Expand all"}
+          </button>
+        </div>
+      }
     >
       <div className="divide-y divide-line">
         {providers.map((p) => {
           const expanded = open.has(p.id);
           const active = p.list.filter((m) => m.is_active !== false);
           const free = p.list.filter((m) => m.is_free);
-          const shown = expanded ? p.list : active.slice(0, 3);
 
           return (
             <div key={p.id}>
               <button
                 onClick={() => toggle(p.id)}
                 aria-expanded={expanded}
+                aria-controls={`models-${p.id}`}
                 className="w-full flex items-center gap-3 px-5 sm:px-6 py-3.5 text-left hover:bg-sunken transition-colors"
               >
                 <span className="w-8 h-8 rounded-lg bg-ink/[0.05] border border-line flex items-center justify-center text-2xs font-bold text-ink-2 uppercase shrink-0">
@@ -352,14 +364,22 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-ink capitalize truncate">{p.id}</span>
                   <span className="block text-xs text-ink-3 num">
-                    {active.length} active{free.length > 0 && ` · ${free.length} free`}
+                    {p.list.length} {p.list.length === 1 ? "model" : "models"}
+                    {active.length !== p.list.length && `, ${active.length} active`}
+                    {free.length > 0 && `, ${free.length} free`}
                   </span>
                 </span>
-                <ChevronDown size={16} className={clsx("text-ink-3 shrink-0 transition-transform", expanded && "rotate-180")} />
+                <span className="text-xs text-ink-3 hidden sm:inline">{expanded ? "Hide" : "Show"}</span>
+                <ChevronDown
+                  size={16}
+                  className={clsx("text-ink-3 shrink-0 transition-transform duration-200", expanded && "rotate-180")}
+                />
               </button>
 
-              {(expanded || shown.length > 0) && (
-                <div className={clsx("px-5 sm:px-6", expanded ? "pb-4" : "pb-3")}>
+              {/* The whole table is what collapses. Previously the rows stayed on
+                  screen and only the chevron moved, so the control did nothing. */}
+              {expanded && (
+                <div id={`models-${p.id}`} className="px-5 sm:px-6 pb-4">
                   <div className="rounded-lg border border-line overflow-hidden">
                     <div className="scroll-x">
                       <table className="table-shell">
@@ -372,7 +392,7 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
                           </tr>
                         </thead>
                         <tbody>
-                          {shown.map((m) => (
+                          {p.list.map((m) => (
                             <tr key={m.id}>
                               <td>
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -386,7 +406,7 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
                               <td className="text-right num text-ink-2 text-xs">${m.input_cost_per_1k_usd.toFixed(6)}</td>
                               <td className="text-right num text-ink-2 text-xs">${m.output_cost_per_1k_usd.toFixed(6)}</td>
                               <td className="text-right num text-ink-2 text-xs">
-                                {m.context_window ? m.context_window.toLocaleString() : "—"}
+                                {m.context_window ? m.context_window.toLocaleString() : "n/a"}
                               </td>
                             </tr>
                           ))}
@@ -394,11 +414,6 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
                       </table>
                     </div>
                   </div>
-                  {!expanded && p.list.length > shown.length && (
-                    <button onClick={() => toggle(p.id)} className="text-xs text-accent-ink hover:underline mt-2">
-                      Show {p.list.length - shown.length} more
-                    </button>
-                  )}
                 </div>
               )}
             </div>

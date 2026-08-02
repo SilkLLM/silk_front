@@ -11,10 +11,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy API calls to the FastAPI backend in development
+      // Proxy API calls to the backend in development, so requests stay
+      // same-origin and no CORS setup is needed while working locally.
+      // Point VITE_DEV_API_TARGET at http://localhost:8000 to develop against a
+      // backend running on your own machine.
       "/api": {
-        target: "https://silkllm.onrender.com",
+        target: process.env.VITE_DEV_API_TARGET || "https://silkllm-backend.169.58.53.167.nip.io",
         changeOrigin: true,
+        secure: false,
       },
     },
   },

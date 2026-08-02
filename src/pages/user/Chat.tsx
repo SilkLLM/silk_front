@@ -54,10 +54,10 @@ const STORAGE_BUDGET = 2_500_000;
 
 type Mode = "text" | "image" | "audio" | "video";
 const MODES: { key: Mode; label: string; icon: React.ReactNode; placeholder: string }[] = [
-  { key: "text",  label: "Text",  icon: <Type size={13} />,       placeholder: "Message SilkLLM…" },
-  { key: "image", label: "Image", icon: <ImageIcon size={13} />,  placeholder: "Describe an image to generate…" },
-  { key: "audio", label: "Audio", icon: <AudioLines size={13} />, placeholder: "Enter text to turn into speech…" },
-  { key: "video", label: "Video", icon: <Video size={13} />,      placeholder: "Describe a video to generate…" },
+  { key: "text",  label: "Text",  icon: <Type size={13} />,       placeholder: "Message SilkLLM..." },
+  { key: "image", label: "Image", icon: <ImageIcon size={13} />,  placeholder: "Describe an image to generate..." },
+  { key: "audio", label: "Audio", icon: <AudioLines size={13} />, placeholder: "Enter text to turn into speech..." },
+  { key: "video", label: "Video", icon: <Video size={13} />,      placeholder: "Describe a video to generate..." },
 ];
 
 function toImageContent(img: string): string {
@@ -104,6 +104,32 @@ function purge(store: ChatStore): ChatStore {
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
+// How tall the composer may grow before it starts scrolling internally, in px.
+// Roughly ten lines at the composer's font size.
+const COMPOSER_MAX_HEIGHT = 220;
+
+/**
+ * Grow a textarea to fit its content, up to a ceiling, then let it scroll.
+ *
+ * The height has to be reset to "auto" before reading scrollHeight, otherwise
+ * the element can only ever grow: scrollHeight is clamped by the height already
+ * set on it, so deleting lines would leave the box oversized.
+ */
+function useAutoGrow(
+  ref: React.RefObject<HTMLTextAreaElement>,
+  value: string,
+  maxHeight = COMPOSER_MAX_HEIGHT,
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, maxHeight);
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [ref, value, maxHeight]);
+}
+
 function SliderRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
     <div>
@@ -138,6 +164,10 @@ export default function Chat() {
   const [cloneName, setCloneName] = useState("");
   const [cloneSamples, setCloneSamples] = useState<File[]>([]);
   const [cloning, setCloning] = useState(false);
+
+  // Keep the composer sized to whatever has been typed, including after send()
+  // clears it and after editMessage() loads a message back in.
+  useAutoGrow(textareaRef, input);
 
   const { data: allModels } = useQuery({
     queryKey: ["chat-models"],
@@ -518,7 +548,7 @@ export default function Chat() {
           />
           {storagePct >= 85 && (
             <p className="text-2xs text-danger mt-1.5 leading-relaxed">
-              Almost full. Delete old chats or media — when full, the oldest chats are removed automatically.
+              Almost full. Delete old chats or media - when full, the oldest chats are removed automatically.
             </p>
           )}
         </div>
@@ -596,7 +626,7 @@ export default function Chat() {
                   <EmptyState
                     icon={<MessageSquare size={19} />}
                     title="Start a conversation"
-                    hint="Pick a model above and send a message. Everything stays on this device — switch modes below to generate images, speech or video."
+                    hint="Pick a model above and send a message. Everything stays on this device - switch modes below to generate images, speech or video."
                   />
                 </div>
               ) : (
@@ -647,7 +677,7 @@ export default function Chat() {
                     {liveText ? <Markdown text={liveText} /> : (
                       <span className="text-ink-2 inline-flex items-center gap-2">
                         <RefreshCw size={13} className="animate-spin" />
-                        {mode === "text" ? "Thinking…" : `Generating ${mode}…`}
+                        {mode === "text" ? "Thinking..." : `Generating ${mode}...`}
                       </span>
                     )}
                   </div>
@@ -721,7 +751,7 @@ export default function Chat() {
                         >
                           <Sparkles size={12} /> Clone voice
                         </button>
-                        {!elVoices && <span className="text-2xs text-ink-3">Loading speakers…</span>}
+                        {!elVoices && <span className="text-2xs text-ink-3">Loading speakers...</span>}
                       </>
                     )}
                     <input
@@ -790,8 +820,9 @@ export default function Chat() {
                 )}
                 <textarea
                   ref={textareaRef}
-                  className="input flex-1 resize-none max-h-40 min-h-[40px] py-2.5"
+                  className="input flex-1 resize-none py-2.5 leading-6"
                   rows={1}
+                  style={{ minHeight: 40, maxHeight: COMPOSER_MAX_HEIGHT }}
                   placeholder={activeMode?.placeholder}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -842,7 +873,7 @@ export default function Chat() {
         open={cloneOpen}
         onClose={() => !cloning && setCloneOpen(false)}
         title="Clone a voice"
-        description="Upload one or more clean samples — about a minute of clear speech works well. The new voice becomes available as a speaker."
+        description="Upload one or more clean samples - about a minute of clear speech works well. The new voice becomes available as a speaker."
         icon={<Sparkles size={17} />}
         footer={
           <>

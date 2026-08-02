@@ -1,7 +1,7 @@
 /**
  * Notifications.tsx
  * The account inbox: earnings, key events, trial warnings and system messages.
- * Unread state is carried by weight, a dot and an explicit filter — not by a
+ * Unread state is carried by weight, a dot and an explicit filter - not by a
  * colour wash alone.
  */
 

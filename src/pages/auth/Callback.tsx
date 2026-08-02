@@ -50,7 +50,7 @@ export default function Callback() {
     <div className="min-h-[100dvh] bg-page flex items-center justify-center px-4">
       <div className="text-center">
         <div className="w-9 h-9 border-[3px] border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-sm text-ink">Signing you in…</p>
+        <p className="text-sm text-ink">Signing you in...</p>
         <p className="text-xs text-ink-3 mt-1.5">This only takes a moment.</p>
       </div>
     </div>

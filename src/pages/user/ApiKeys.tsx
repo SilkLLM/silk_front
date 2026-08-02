@@ -3,7 +3,7 @@
  * Create, review and revoke API keys.
  *
  * The secret is shown exactly once, so that moment gets a modal rather than a
- * banner that can be scrolled past — the key cannot be recovered afterwards.
+ * banner that can be scrolled past - the key cannot be recovered afterwards.
  */
 
 // File: silkllm-frontend/src/pages/user/ApiKeys.tsx
@@ -109,7 +109,7 @@ export default function ApiKeys() {
         <div className="px-5 sm:px-6 py-5">
           <div className="flex flex-col sm:flex-row gap-2.5">
             <Input
-              placeholder="Name this key — e.g. Production, CI, Dev laptop"
+              placeholder="Name this key - e.g. Production, CI, Dev laptop"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) create.mutate(name.trim()); }}
@@ -184,9 +184,9 @@ export default function ApiKeys() {
       </Panel>
 
       <Callout tone="info" icon={<Terminal size={16} />} title="Using your key">
-        <p>Send it as a Bearer token against a single endpoint — the gateway resolves the provider for you.</p>
+        <p>Send it as a Bearer token against a single endpoint - the gateway resolves the provider for you.</p>
         <pre className="mt-2 rounded-lg border border-line bg-sunken px-3 py-2.5 overflow-x-auto text-2xs font-mono text-ink-2 leading-relaxed">
-{`curl https://silkllm.onrender.com/api/generate \\
+{`curl https://silkllm-backend.169.58.53.167.nip.io/api/generate \\
   -H "Authorization: Bearer silk_..." \\
   -H "Content-Type: application/json" \\
   -d '{"messages":[{"role":"user","content":"Hello"}]}'`}
@@ -214,7 +214,7 @@ export default function ApiKeys() {
             </div>
             <Callout tone="warning" icon={<AlertTriangle size={15} />}>
               Anyone with this key can spend your balance. It is also cached in this browser so the
-              copy button keeps working — clear your site data to remove it.
+              copy button keeps working - clear your site data to remove it.
             </Callout>
           </div>
         )}
@@ -224,7 +224,7 @@ export default function ApiKeys() {
         open={!!confirming}
         onClose={() => setConfirming(null)}
         onConfirm={() => confirming && revoke.mutate(confirming.id)}
-        title={`Revoke “${confirming?.name}”?`}
+        title={`Revoke "${confirming?.name}"?`}
         body="Any application still using this key will start failing immediately. This cannot be undone."
         confirmLabel="Revoke key"
         pending={revoke.isPending}

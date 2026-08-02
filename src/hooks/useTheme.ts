@@ -83,7 +83,7 @@ export function useTheme() {
   const current = useSyncExternalStore(subscribe, getMode, getServerMode);
   const resolved = resolve(current);
 
-  /** Cycle light → dark → system, which is what the header button does. */
+  /** Cycle light, dark, system, which is what the header button does. */
   const cycle = useCallback(() => {
     setThemeMode(mode === "light" ? "dark" : mode === "dark" ? "system" : "light");
   }, []);

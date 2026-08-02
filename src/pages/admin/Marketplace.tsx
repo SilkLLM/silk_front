@@ -5,7 +5,7 @@
  * reactivate control. Regular users never see any of this.
  *
  * The by-provider chart is a magnitude comparison of one measure, so it uses a
- * single hue — colour would be restating the axis. Every plotted value is also
+ * single hue - colour would be restating the axis. Every plotted value is also
  * present in the tables below.
  */
 
@@ -135,7 +135,7 @@ export default function Marketplace() {
                     cursor={{ fill: t.grid, opacity: 0.5 }}
                     content={<ChartTooltip formatter={(v: any) => usdPrecise(Number(v))} />}
                   />
-                  {/* One measure, one hue — the axis already carries magnitude. */}
+                  {/* One measure, one hue - the axis already carries magnitude. */}
                   <Bar dataKey="value" name="Cost served" fill={t.seriesAt(0)} radius={[4, 4, 0, 0]} maxBarSize={24} />
                 </BarChart>
               </ResponsiveContainer>

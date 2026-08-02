@@ -3,7 +3,7 @@
  * The BYOK marketplace from the depositor's side: deposit provider keys, control
  * how they are used, and watch what they earn.
  *
- * The deposit form is a modal rather than an always-open block — most visits are
+ * The deposit form is a modal rather than an always-open block - most visits are
  * to check earnings, not to add a key. The economics sit next to the form,
  * because "public" is the consequential choice on this page.
  */
@@ -21,7 +21,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { providerKeysApi, modelsApi } from "@/services/api";
 import {
   Badge, Button, Callout, Checkbox, ConfirmDialog, EmptyState, Field, IconButton,
-  Input, Meter, Modal, PageHeader, Panel, Select, Skeleton, StatTile, Switch,
+  Input, Meter, Modal, PageHeader, Panel, Select, Skeleton, StatTile, ToggleField,
 } from "@/components/ui";
 import { compact, usdPrecise } from "@/lib/charts";
 
@@ -118,7 +118,7 @@ export default function ProviderHub() {
       <Callout tone="brand" icon={<Info size={17} />} title="How the marketplace pays you">
         <p>
           <strong className="text-ink">Public</strong> keys are used only by the routing engine to serve
-          other users — they are never shown to anyone. You earn 75% of the provider cost as SilkLLM
+          other users - they are never shown to anyone. You earn 75% of the provider cost as SilkLLM
           credits, spendable on any model at the normal 10% markup.
         </p>
         <p>
@@ -126,7 +126,7 @@ export default function ProviderHub() {
           public key for your own requests costs the normal 10% and earns nothing.
         </p>
         <p>
-          Turn off “serve my own requests” to be routed as if you had deposited nothing, while your public
+          Turn off "serve my own requests" to be routed as if you had deposited nothing, while your public
           key keeps serving the marketplace. Free models cost nothing and earn nothing. Your secret is
           encrypted at rest and never shown again.
         </p>
@@ -213,23 +213,23 @@ export default function ProviderHub() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-5 mt-4 pt-3.5 border-t border-line flex-wrap">
-                    <label className="flex items-center gap-2 text-xs text-ink-2 cursor-pointer">
-                      <Switch
-                        checked={k.is_public}
-                        label="Public"
-                        onChange={(v) => update.mutate({ id: k.id, data: { is_public: v } })}
-                      />
-                      Public — share and earn
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-ink-2 cursor-pointer">
-                      <Switch
-                        checked={k.serve_owner_with_own_key}
-                        label="Serve my own requests"
-                        onChange={(v) => update.mutate({ id: k.id, data: { serve_owner_with_own_key: v } })}
-                      />
-                      Serve my own requests
-                    </label>
+                  <div className="mt-4 pt-4 border-t border-line grid sm:grid-cols-2 gap-4">
+                    <ToggleField
+                      checked={k.is_public}
+                      onChange={(v) => update.mutate({ id: k.id, data: { is_public: v } })}
+                      title="Share and earn"
+                      description="Let the router serve other users with this key."
+                      stateLabels={["Public", "Private"]}
+                      pending={update.isPending && update.variables?.id === k.id && "is_public" in (update.variables?.data || {})}
+                    />
+                    <ToggleField
+                      checked={k.serve_owner_with_own_key}
+                      onChange={(v) => update.mutate({ id: k.id, data: { serve_owner_with_own_key: v } })}
+                      title="Serve my own requests"
+                      description="Use this key for your own traffic instead of the pool."
+                      stateLabels={["On", "Off"]}
+                      pending={update.isPending && update.variables?.id === k.id && "serve_owner_with_own_key" in (update.variables?.data || {})}
+                    />
                   </div>
                 </li>
               );
@@ -279,7 +279,7 @@ export default function ProviderHub() {
               className="font-mono"
               value={form.api_key}
               onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-              placeholder="sk-…"
+              placeholder="sk-..."
               autoComplete="off"
             />
           </Field>
@@ -299,7 +299,7 @@ export default function ProviderHub() {
             <Checkbox
               checked={form.is_public}
               onChange={(v) => setForm({ ...form, is_public: v })}
-              label="Public — share and earn"
+              label="Public - share and earn"
               hint="The router may use this key to serve other users. You earn 75% of the provider cost as credits."
             />
             <Checkbox
@@ -323,7 +323,7 @@ export default function ProviderHub() {
         open={!!confirming}
         onClose={() => setConfirming(null)}
         onConfirm={() => confirming && revoke.mutate(confirming.id)}
-        title={`Revoke “${confirming?.label}”?`}
+        title={`Revoke "${confirming?.label}"?`}
         body="The key stops serving immediately and is removed from the routing pool. Credits you have already earned stay in your balance."
         confirmLabel="Revoke key"
         pending={revoke.isPending}

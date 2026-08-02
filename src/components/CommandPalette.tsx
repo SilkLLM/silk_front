@@ -129,7 +129,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search pages and actions…"
+            placeholder="Search pages and actions..."
             className="flex-1 bg-transparent h-14 text-sm text-ink placeholder:text-ink-3 outline-none"
           />
           <Kbd>esc</Kbd>
@@ -137,7 +137,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
 
         <div ref={listRef} className="max-h-[52vh] overflow-y-auto p-2">
           {results.length === 0 ? (
-            <p className="text-sm text-ink-3 text-center py-10">No matches for “{query}”.</p>
+            <p className="text-sm text-ink-3 text-center py-10">No matches for "{query}".</p>
           ) : (
             results.map((c, i) => {
               const header = c.group !== lastGroup ? c.group : null;
@@ -167,8 +167,8 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
         </div>
 
         <div className="flex items-center gap-4 px-4 py-2.5 border-t border-line bg-sunken text-2xs text-ink-3">
-          <span className="inline-flex items-center gap-1.5"><Kbd>↑</Kbd><Kbd>↓</Kbd> navigate</span>
-          <span className="inline-flex items-center gap-1.5"><Kbd>↵</Kbd> open</span>
+          <span className="inline-flex items-center gap-1.5"><Kbd>Up</Kbd><Kbd>Down</Kbd> navigate</span>
+          <span className="inline-flex items-center gap-1.5"><Kbd>Enter</Kbd> open</span>
         </div>
       </div>
     </div>,

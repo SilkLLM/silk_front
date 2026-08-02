@@ -4,7 +4,7 @@
  * the chat stream) and prompts the user to top up.
  *
  * Free models are free only while the trial allowance lasts, which is the part
- * users are surprised by — so the modal says it explicitly rather than just
+ * users are surprised by - so the modal says it explicitly rather than just
  * reporting the error.
  */
 
@@ -60,7 +60,7 @@ export default function PaymentReminderModal() {
         <Sparkles size={14} className="text-accent-ink mt-0.5 shrink-0" />
         <p className="text-xs text-ink-2 leading-relaxed">
           Free models are free during your trial. Once the daily trial allowance is used up, every
-          request — including free models — draws from your balance.
+          request - including free models - draws from your balance.
         </p>
       </div>
     </Modal>

@@ -68,7 +68,7 @@ export default function AdminTopups() {
         <StatTile label="Top-ups logged" value={list.length} icon={<PlusCircle size={14} />} />
         <StatTile
           label="Most recent"
-          value={last ? usdShort(last.amount) : "—"}
+          value={last ? usdShort(last.amount) : "-"}
           icon={<Clock size={14} />}
           hint={last ? `${last.provider_id} · ${format(new Date(last.created_at), "MMM d")}` : "Nothing yet"}
         />
@@ -77,7 +77,7 @@ export default function AdminTopups() {
       <Callout tone="info" icon={<Info size={17} />} title="How this works">
         <p>
           SilkLLM does not purchase provider credit automatically. Buy it directly from OpenAI, Anthropic
-          and the rest, then record the transaction here — that resets the balance tracker and the
+          and the rest, then record the transaction here - that resets the balance tracker and the
           low-credit alert threshold for that provider.
         </p>
       </Callout>
@@ -87,7 +87,7 @@ export default function AdminTopups() {
           <div className="px-5 sm:px-6 py-5 space-y-4">
             <Field label="Provider" required>
               <Select value={form.provider_id} onChange={(e) => setForm((f) => ({ ...f, provider_id: e.target.value }))}>
-                <option value="">Select a provider…</option>
+                <option value="">Select a provider...</option>
                 {(providers || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
             </Field>
@@ -111,7 +111,7 @@ export default function AdminTopups() {
               </Field>
             </div>
 
-            <Field label="Note" hint="Optional — invoice number, who paid, anything worth remembering.">
+            <Field label="Note" hint="Optional - invoice number, who paid, anything worth remembering.">
               <Input
                 placeholder="Added $500 via OpenAI billing, invoice #12345"
                 value={form.note}

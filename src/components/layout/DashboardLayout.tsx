@@ -8,7 +8,7 @@
  * icon rail (persisted), so dense pages such as Model Control get their width
  * back.
  *
- * `fullBleed` hands the main area over to the page — the chat view manages its
+ * `fullBleed` hands the main area over to the page - the chat view manages its
  * own scrolling and needs the height.
  */
 
@@ -52,7 +52,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Settings",    href: "/admin/settings",    icon: <SlidersHorizontal size={17} /> },
 ];
 
-/** Route → page title, used by the topbar so every page names itself the same way. */
+/** Route to page title, used by the topbar so every page names itself the same way. */
 const TITLES: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/chat": "Chat",
@@ -71,6 +71,12 @@ const TITLES: Record<string, string> = {
 };
 
 const COLLAPSE_KEY = "silk_sidebar_collapsed";
+
+/** Shortcut modifier as the platform names it, so the hint matches the keyboard. */
+const SHORTCUT_KEY =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+    ? "Cmd"
+    : "Ctrl";
 
 // ── Sidebar pieces ──────────────────────────────────────────────────────────
 
@@ -418,14 +424,14 @@ export default function DashboardLayout({ children, fullBleed }: {
 
           <div className="flex-1" />
 
-          {/* Command palette affordance — discoverable, not just a shortcut. */}
+          {/* Command palette affordance - discoverable, not just a shortcut. */}
           <button
             onClick={() => setPalette(true)}
             className="hidden md:inline-flex items-center gap-2 h-9 pl-3 pr-2 rounded-lg border border-line bg-sunken text-xs text-ink-3 hover:text-ink-2 hover:border-line-strong transition-colors w-[184px]"
           >
             <Search size={14} className="shrink-0" />
-            <span className="flex-1 text-left">Search…</span>
-            <Kbd>⌘K</Kbd>
+            <span className="flex-1 text-left">Search...</span>
+            <Kbd>{SHORTCUT_KEY} K</Kbd>
           </button>
           <IconButton label="Search" className="md:hidden" onClick={() => setPalette(true)}>
             <Search size={18} />

@@ -3,15 +3,15 @@
  * The chart layer: one place that owns colour, chrome, and the tooltip so every
  * chart in the dashboard reads as the same system.
  *
- * The categorical order below is not cosmetic — it was chosen by enumerating
+ * The categorical order below is not cosmetic - it was chosen by enumerating
  * orderings and keeping only those that clear the colour-vision-deficiency and
  * normal-vision separation gates on *both* surfaces. Worst adjacent pair:
- * CVD ΔE 9.2, normal-vision ΔE 18.2 (OKLab x100). Dark is its own set of steps
+ * CVD dE 9.2, normal-vision dE 18.2 (OKLab x100). Dark is its own set of steps
  * for the dark surface, not an automatic flip of the light one.
  *
  * Three of the light steps sit under 3:1 against white. That is allowed here
  * because every chart ships identity through a legend or a direct label and the
- * underlying numbers are always available as a table or tooltip — colour is
+ * underlying numbers are always available as a table or tooltip - colour is
  * never the only channel.
  */
 
@@ -38,7 +38,7 @@ export function useChartTheme() {
   return {
     mode: resolved,
     series,
-    /** Colour for slot `i`. Assigned in fixed order and never cycled past 8 —
+    /** Colour for slot `i`. Assigned in fixed order and never cycled past 8 -
      *  callers with more entities fold the tail into "Other". */
     seriesAt: (i: number) => series[Math.min(i, series.length - 1)],
     ...chrome,

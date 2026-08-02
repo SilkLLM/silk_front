@@ -1,6 +1,6 @@
 /**
  * Alerts.tsx (admin)
- * System health alerts — low provider balance, outages, error spikes — with
+ * System health alerts - low provider balance, outages, error spikes - with
  * acknowledgement.
  *
  * Severity is carried by an icon and an explicit label as well as colour, so it

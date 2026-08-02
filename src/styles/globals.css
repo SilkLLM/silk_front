@@ -30,17 +30,17 @@
     --c-line-strong: 213 209 199;   /* #D5D1C7 */
     --c-ink:          26  25  24;   /* #1A1918  17.6:1 on surface */
     --c-ink-2:        87  83  78;   /* #57534E   7.6:1 */
-    --c-ink-3:       138 133 125;   /* #8A857D   3.7:1 — meta text only */
+    --c-ink-3:       138 133 125;   /* #8A857D   3.7:1 - meta text only */
     --c-accent:      210 154  45;   /* #D29A2D brand fill */
-    --c-accent-ink:  152 105  15;   /* #98690F  4.8:1 — brand as readable text */
+    --c-accent-ink:  152 105  15;   /* #98690F  4.8:1 - brand as readable text */
     --c-on-accent:    26  25  24;   /* dark ink on a gold fill (7:1) */
     --c-success:      15 122  61;   /* #0F7A3D  5.4:1 */
     --c-warn:        138  90   8;   /* #8A5A08  5.9:1 */
     --c-danger:      196  52  47;   /* #C4342F  5.4:1 */
     --c-shadow:       26  25  24;
 
-    /* Chart tokens — the validated categorical order, light steps.
-       Worst adjacent CVD ΔE 9.2, worst adjacent normal-vision ΔE 18.2. */
+    /* Chart tokens - the validated categorical order, light steps.
+       Worst adjacent CVD dE 9.2, worst adjacent normal-vision dE 18.2. */
     --chart-1: #D29A2D;
     --chart-2: #e87ba4;
     --chart-3: #008300;
@@ -75,7 +75,7 @@
     --c-danger:      240 117 112;   /* #F07570  6.3:1 */
     --c-shadow:        0   0   0;
 
-    /* Same eight hues, stepped for the dark surface — not an automatic flip. */
+    /* Same eight hues, stepped for the dark surface - not an automatic flip. */
     --chart-1: #BC8A20;
     --chart-2: #d55181;
     --chart-3: #008300;

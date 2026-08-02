@@ -12,7 +12,7 @@
 
 import React, { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronLeft, ChevronRight, Copy, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, Minus, Search, X } from "lucide-react";
 import clsx from "clsx";
 
 // ── Page scaffolding ────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export function Card({ title, description, icon, actions, footer, flush, classNa
   );
 }
 
-/** Like Card but the body is edge-to-edge — for tables and lists. */
+/** Like Card but the body is edge-to-edge - for tables and lists. */
 export function Panel({ title, description, icon, actions, footer, className, children }: {
   title?: React.ReactNode;
   description?: React.ReactNode;
@@ -254,34 +254,113 @@ export function SearchInput({ value, onChange, placeholder = "Search", className
   );
 }
 
-export function Switch({ checked, onChange, label, disabled, tone = "accent" }: {
+/**
+ * A switch that says what it is and what it is doing.
+ *
+ * The bare track used previously gave no clue what it controlled or which side
+ * meant "on", and it did not move until the server answered, so a click read as
+ * "nothing happened". This renders the state as words next to the track and
+ * shows a pending tick while a request is in flight.
+ */
+export function Switch({
+  checked, onChange, label, stateLabels, disabled, pending, tone = "accent", size = "md",
+}: {
   checked: boolean;
   onChange: (v: boolean) => void;
+  /** Accessible name. Also the visible text when `stateLabels` is not used. */
   label?: string;
+  /** Words shown beside the track, e.g. ["Enabled", "Disabled"]. */
+  stateLabels?: [string, string];
   disabled?: boolean;
-  tone?: "accent" | "danger";
+  pending?: boolean;
+  tone?: "accent" | "danger" | "success";
+  size?: "sm" | "md";
 }) {
-  return (
+  const track = size === "sm" ? "w-[34px] h-[20px]" : "w-[40px] h-[24px]";
+  const knob = size === "sm" ? "w-3.5 h-3.5" : "w-[18px] h-[18px]";
+  const shift = size === "sm"
+    ? (checked ? "translate-x-[17px]" : "translate-x-[3px]")
+    : (checked ? "translate-x-[19px]" : "translate-x-[3px]");
+
+  const onColour = { accent: "bg-accent", danger: "bg-danger", success: "bg-success" }[tone];
+
+  const control = (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
-      title={label}
-      disabled={disabled}
+      aria-busy={pending || undefined}
+      disabled={disabled || pending}
       onClick={() => onChange(!checked)}
       className={clsx(
-        "relative w-[38px] h-[22px] rounded-full transition-colors shrink-0 disabled:opacity-40",
-        checked ? (tone === "danger" ? "bg-danger" : "bg-accent") : "bg-line-strong",
+        "relative rounded-full shrink-0 transition-colors duration-150",
+        "disabled:cursor-not-allowed",
+        pending && "opacity-70",
+        (disabled && !pending) && "opacity-40",
+        track,
+        checked ? onColour : "bg-line-strong hover:bg-ink-3/60",
       )}
     >
       <span
         className={clsx(
-          "absolute top-[3px] w-4 h-4 rounded-full bg-white shadow-xs transition-transform",
-          checked ? "translate-x-[19px]" : "translate-x-[3px]",
+          "absolute top-[3px] rounded-full bg-white shadow-xs transition-transform duration-150",
+          knob,
+          shift,
         )}
       />
     </button>
+  );
+
+  if (!stateLabels) return control;
+
+  return (
+    <span className="inline-flex items-center gap-2.5">
+      {control}
+      <span
+        className={clsx(
+          "text-xs font-medium tabular-nums whitespace-nowrap",
+          pending ? "text-ink-3" : checked ? "text-ink" : "text-ink-3",
+        )}
+      >
+        {pending ? "Saving" : checked ? stateLabels[0] : stateLabels[1]}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A switch presented as a labelled row: name, one line of explanation, control.
+ * Use this anywhere the switch is not already sitting under a column header.
+ */
+export function ToggleField({
+  checked, onChange, title, description, stateLabels, pending, disabled, tone = "accent",
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  title: string;
+  description?: React.ReactNode;
+  stateLabels?: [string, string];
+  pending?: boolean;
+  disabled?: boolean;
+  tone?: "accent" | "danger" | "success";
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink">{title}</p>
+        {description && <p className="text-xs text-ink-3 mt-0.5 leading-relaxed">{description}</p>}
+      </div>
+      <Switch
+        checked={checked}
+        onChange={onChange}
+        label={title}
+        stateLabels={stateLabels}
+        pending={pending}
+        disabled={disabled}
+        tone={tone}
+      />
+    </div>
   );
 }
 
@@ -403,7 +482,7 @@ export function Pagination({ page, totalPages, total, onPage, unit = "records" }
 
 export type BadgeTone = "neutral" | "info" | "brand" | "success" | "warning" | "error";
 
-// Spelled out for the same reason as BUTTON_CLASS — a template string here would
+// Spelled out for the same reason as BUTTON_CLASS - a template string here would
 // be purged from the stylesheet and render an unstyled badge.
 const BADGE_CLASS: Record<BadgeTone, string> = {
   neutral: "badge-neutral",
@@ -435,7 +514,7 @@ export function StatusDot({ tone, label }: { tone: "success" | "warning" | "erro
 
 /**
  * Stat tile: label, value, optional signed delta and sparkline.
- * The value uses proportional figures — tabular-nums makes large standalone
+ * The value uses proportional figures - tabular-nums makes large standalone
  * numbers look loose, so it is reserved for table columns.
  */
 export function StatTile({ label, value, icon, delta, deltaLabel, deltaGood = "up", hint, accent, to, spark }: {
@@ -467,10 +546,11 @@ export function StatTile({ label, value, icon, delta, deltaLabel, deltaGood = "u
         <div className="flex items-center gap-2 flex-wrap">
           {delta !== undefined && (
             <span className={clsx(
-              "inline-flex items-center gap-0.5 text-xs font-medium num",
+              "inline-flex items-center gap-1 text-xs font-medium num",
               good === null ? "text-ink-3" : good ? "text-success" : "text-danger",
             )}>
-              {positive ? "▲" : delta < 0 ? "▼" : "–"} {Math.abs(delta).toFixed(1)}%
+              {positive ? <ArrowUp size={12} /> : delta < 0 ? <ArrowDown size={12} /> : <Minus size={12} />}
+              {Math.abs(delta).toFixed(1)}%
             </span>
           )}
           {(deltaLabel || hint) && <span className="text-xs text-ink-3">{deltaLabel || hint}</span>}
@@ -752,7 +832,7 @@ export function MenuSeparator() {
   return <div className="my-1.5 h-px bg-line" />;
 }
 
-/** Keyboard hint, e.g. ⌘K. */
+/** Keyboard hint, e.g. Cmd K. */
 export function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded border border-line bg-sunken text-[10px] font-medium text-ink-3 font-sans">

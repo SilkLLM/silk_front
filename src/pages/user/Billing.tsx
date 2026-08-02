@@ -218,7 +218,7 @@ export default function Billing() {
               loading={checkout.isPending}
               onClick={() => checkout.mutate()}
             >
-              {checkout.isPending ? "Redirecting…" : <>Add ${amount} in credits <ArrowUpRight size={15} /></>}
+              {checkout.isPending ? "Redirecting..." : <>Add ${amount} in credits <ArrowUpRight size={15} /></>}
             </Button>
             {!valid && (
               <p className="text-xs text-danger text-center -mt-3">

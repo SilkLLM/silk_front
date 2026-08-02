@@ -5,7 +5,7 @@
  *
  * Filters sit in one row above the content they filter. The chart is a single
  * series so it carries no legend, and every value it plots is also present in
- * the table below — colour is never the only way to read this page.
+ * the table below - colour is never the only way to read this page.
  */
 
 // File: silkllm-frontend/src/pages/user/Usage.tsx
@@ -46,7 +46,7 @@ function totalTokens(entry: any): number | null {
   return null;
 }
 
-/** Download the visible page as CSV — the table view, portable. */
+/** Download the visible page as CSV - the table view, portable. */
 function exportCsv(entries: any[]) {
   const header = ["time", "type", "model", "prompt_tokens", "completion_tokens", "amount_usd", "balance_after_usd"];
   const rows = entries.map((e) => [
@@ -183,7 +183,7 @@ export default function Usage() {
           <EmptyState
             icon={<Receipt size={19} />}
             title="No records yet"
-            hint={entryType ? "Nothing matches this filter. Try “All”." : "Your API calls and purchases will show up here."}
+            hint={entryType ? "Nothing matches this filter. Try 'All'." : "Your API calls and purchases will show up here."}
           />
         ) : (
           <div className="scroll-x">
@@ -210,12 +210,12 @@ export default function Usage() {
                       <td>
                         <Badge tone={TONE[e.entry_type] || "neutral"}>{e.entry_type}</Badge>
                       </td>
-                      <td className="font-mono text-xs text-ink-2 max-w-[220px] truncate">{e.model || "—"}</td>
+                      <td className="font-mono text-xs text-ink-2 max-w-[220px] truncate">{e.model || "-"}</td>
                       <td className="text-right num text-ink-2 text-xs">
-                        {tokens !== null ? tokens.toLocaleString() : "—"}
+                        {tokens !== null ? tokens.toLocaleString() : "-"}
                       </td>
                       <td className={`text-right num text-xs font-medium ${debit ? "text-ink" : "text-success"}`}>
-                        {debit ? "−" : "+"}${Math.abs(e.amount).toFixed(6)}
+                        {debit ? "-" : "+"}${Math.abs(e.amount).toFixed(6)}
                       </td>
                       <td className="text-right num text-ink-2 text-xs">${e.balance_after.toFixed(4)}</td>
                     </tr>

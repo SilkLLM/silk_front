@@ -1,6 +1,6 @@
 /**
  * Settings.tsx (admin)
- * Live platform settings — trial limits, markup and reward percentages — plus
+ * Live platform settings - trial limits, markup and reward percentages - plus
  * the emergency kill switches.
  *
  * A setting is only saved when it is explicitly submitted, and a dirty row says
@@ -97,7 +97,7 @@ function KillSwitches() {
       {live.length > 0 && (
         <div className="px-5 sm:px-6 pt-4">
           <Callout tone="danger" icon={<ShieldAlert size={16} />} title="Switches are engaged">
-            <p>{live.map((f) => f.label).join(", ")} — traffic is being blocked right now.</p>
+            <p>{live.map((f) => f.label).join(", ")} - traffic is being blocked right now.</p>
           </Callout>
         </div>
       )}
@@ -120,7 +120,9 @@ function KillSwitches() {
               <Switch
                 checked={f.enabled}
                 tone="danger"
-                label={`${f.enabled ? "Disengage" : "Engage"} ${f.label}`}
+                stateLabels={["Engaged", "Off"]}
+                label={f.label}
+                pending={set.isPending && set.variables?.key === f.key}
                 onChange={(v) => set.mutate({ key: f.key, enabled: v })}
               />
             </li>
@@ -148,7 +150,7 @@ export default function Settings() {
     <DashboardLayout>
       <PageHeader
         title="Platform Settings"
-        subtitle="Live values read on every request. Changes apply within seconds — no redeploy."
+        subtitle="Live values read on every request. Changes apply within seconds - no redeploy."
       />
 
       <Callout tone="warning" icon={<SlidersHorizontal size={17} />} title="These move real money">

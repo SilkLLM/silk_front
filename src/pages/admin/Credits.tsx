@@ -3,7 +3,7 @@
  * Users, the financial ledger, and manual refunds.
  *
  * The top-balances chart compares one measure across users, so it uses a single
- * hue — cycling colours there would restate the axis and imply a category that
+ * hue - cycling colours there would restate the axis and imply a category that
  * does not exist. Every plotted value is in the table underneath.
  */
 
@@ -133,7 +133,7 @@ export default function AdminCredits() {
                       cursor={{ fill: t.grid, opacity: 0.5 }}
                       content={<ChartTooltip formatter={(v: any) => usdPrecise(Number(v))} />}
                     />
-                    {/* One measure across entities — a single hue, not a rainbow. */}
+                    {/* One measure across entities - a single hue, not a rainbow. */}
                     <Bar dataKey="balance" name="Balance" fill={t.seriesAt(0)} radius={[4, 4, 0, 0]} maxBarSize={24} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -201,7 +201,7 @@ export default function AdminCredits() {
                               {(u.name || u.email || "?")[0]}
                             </span>
                             <span className="min-w-0">
-                              <span className="block text-sm text-ink truncate">{u.name || "—"}</span>
+                              <span className="block text-sm text-ink truncate">{u.name || "-"}</span>
                               <span className="block text-2xs text-ink-3 truncate">{u.email}</span>
                             </span>
                           </div>
@@ -261,10 +261,10 @@ export default function AdminCredits() {
                       <td className="text-xs text-ink-2 num whitespace-nowrap">
                         {format(new Date(e.created_at), "MMM d, HH:mm")}
                       </td>
-                      <td className="text-xs text-ink-2 max-w-[200px] truncate">{e.user_email || "—"}</td>
+                      <td className="text-xs text-ink-2 max-w-[200px] truncate">{e.user_email || "-"}</td>
                       <td><Badge tone="neutral">{e.entry_type}</Badge></td>
                       <td className={`text-right num text-xs font-medium ${e.amount < 0 ? "text-ink" : "text-success"}`}>
-                        {e.amount < 0 ? "−" : "+"}${Math.abs(e.amount).toFixed(6)}
+                        {e.amount < 0 ? "-" : "+"}${Math.abs(e.amount).toFixed(6)}
                       </td>
                       <td className="text-right num text-xs text-ink-2">${e.balance_after.toFixed(4)}</td>
                     </tr>
@@ -286,9 +286,9 @@ export default function AdminCredits() {
           <div className="px-5 sm:px-6 py-5 space-y-4">
             <Field label="User" required>
               <Select value={refund.user_id} onChange={(e) => setRefund((f) => ({ ...f, user_id: e.target.value }))}>
-                <option value="">Select a user…</option>
+                <option value="">Select a user...</option>
                 {all.map((u: any) => (
-                  <option key={u.id} value={u.id}>{u.email} — ${u.balance.toFixed(2)}</option>
+                  <option key={u.id} value={u.id}>{u.email} - ${u.balance.toFixed(2)}</option>
                 ))}
               </Select>
             </Field>
@@ -321,7 +321,7 @@ export default function AdminCredits() {
 
             <Field label="Reason" required hint="Recorded on the ledger entry for audit.">
               <Input
-                placeholder="Customer service credit — duplicate charge"
+                placeholder="Customer service credit - duplicate charge"
                 value={refund.reason}
                 onChange={(e) => setRefund((f) => ({ ...f, reason: e.target.value }))}
               />

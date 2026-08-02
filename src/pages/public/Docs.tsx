@@ -61,7 +61,7 @@ console.log(\`Cost: $\${response.cost_usd} | Balance: $\${response.balance_after
   process.stdout.write(chunk);
 }`,
 
-  curlGenerate: `curl https://silkllm.onrender.com/api/generate \\
+  curlGenerate: `curl https://silkllm-backend.169.58.53.167.nip.io/api/generate \\
   -H "Authorization: Bearer silk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{"messages":[{"role":"user","content":"Hello!"}],"model":"gpt-4o"}'`,
@@ -429,7 +429,7 @@ const SECTIONS = [
       <>
         <Para>List every available model with pricing, modality, and whether it is free. Filter by provider.</Para>
         <LangTabs python={CODE.pyModels} javascript={CODE.jsModels} />
-        <CodeBlock code={`curl "https://silkllm.onrender.com/api/models?provider=google" \\
+        <CodeBlock code={`curl "https://silkllm-backend.169.58.53.167.nip.io/api/models?provider=google" \\
   -H "Authorization: Bearer silk_your_key"`} lang="bash" />
         <Callout>Free models (is_free) are billed at $0. They serve the free tier and trials, and anyone can use them at no cost.</Callout>
       </>

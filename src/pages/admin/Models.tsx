@@ -21,7 +21,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
 import {
   Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Modal,
-  PageHeader, Panel, SearchInput, Select, Skeleton, StatTile, Switch, Toolbar,
+  PageHeader, Panel, SearchInput, Select, Skeleton, StatTile, Switch, ToggleField, Toolbar,
 } from "@/components/ui";
 
 interface AdminModel {
@@ -150,12 +150,14 @@ function ModelForm({ draft, setDraft, providerIds, isNew }: {
         />
       </Field>
 
-      <div className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-4 py-3">
-        <Switch checked={draft.enabled} label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
-        <div>
-          <p className="text-sm text-ink">Available to users</p>
-          <p className="text-xs text-ink-3">Disabled models are hidden from routing and the picker.</p>
-        </div>
+      <div className="rounded-xl border border-line bg-sunken px-4 py-3.5">
+        <ToggleField
+          checked={draft.enabled}
+          onChange={(v) => setDraft({ ...draft, enabled: v })}
+          title="Available to users"
+          description="Disabled models are hidden from the picker and never routed to."
+          stateLabels={["Enabled", "Disabled"]}
+        />
       </div>
     </div>
   );
@@ -185,6 +187,32 @@ export default function AdminModels() {
     mutationFn: ({ id, data }: { id: string; data: any }) => adminApi.models.update(id, data),
     onSuccess: () => { toast.success("Model updated."); qc.invalidateQueries({ queryKey: ["admin-models"] }); },
     onError: (e: any) => toast.error(e.response?.data?.detail || "Update failed."),
+  });
+
+  /**
+   * Availability gets its own mutation with an optimistic write, so the switch
+   * moves on click instead of waiting for the refetch. See the matching comment
+   * on the Providers page.
+   */
+  const toggleEnabled = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      adminApi.models.update(id, { enabled }),
+    onMutate: async ({ id, enabled }) => {
+      await qc.cancelQueries({ queryKey: ["admin-models"] });
+      const previous = qc.getQueryData<AdminModel[]>(["admin-models"]);
+      qc.setQueryData<AdminModel[]>(["admin-models"], (old) =>
+        (old || []).map((m) => (m.id === id ? { ...m, enabled } : m)),
+      );
+      return { previous };
+    },
+    onError: (e: any, _vars, ctx) => {
+      qc.setQueryData(["admin-models"], ctx?.previous);
+      toast.error(e.response?.data?.detail || "Could not change the model.");
+    },
+    onSuccess: (_d, { enabled }) => {
+      toast.success(enabled ? "Model enabled and routable." : "Model disabled and hidden from users.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-models"] }),
   });
 
   const create = useMutation({
@@ -258,7 +286,7 @@ export default function AdminModels() {
         <StatTile label="Multimodal" value={all.filter((m) => (m.modality || "text") !== "text").length} icon={<Cpu size={14} />} hint="Image, audio, video" />
       </div>
 
-      {/* Filters — one row above the content they filter. */}
+      {/* Filters - one row above the content they filter. */}
       <Panel>
         <div className="px-5 sm:px-6 py-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -359,7 +387,7 @@ export default function AdminModels() {
                           <th className="text-right">Weight</th>
                           <th className="text-right">Context</th>
                           <th>Fallbacks</th>
-                          <th className="text-right">Enabled</th>
+                          <th>Availability</th>
                           <th />
                         </tr>
                       </thead>
@@ -378,19 +406,20 @@ export default function AdminModels() {
                             <td className="text-right num text-xs text-ink-2">${m.output_cost_per_1k.toFixed(6)}</td>
                             <td className="text-right num text-xs text-ink-2">{m.routing_weight}</td>
                             <td className="text-right num text-xs text-ink-2">
-                              {m.context_window ? m.context_window.toLocaleString() : "—"}
+                              {m.context_window ? m.context_window.toLocaleString() : "-"}
                             </td>
                             <td className="text-xs text-ink-3 font-mono max-w-[180px] truncate">
-                              {(m.fallback_models || []).join(", ") || "—"}
+                              {(m.fallback_models || []).join(", ") || "-"}
                             </td>
                             <td>
-                              <div className="flex justify-end">
-                                <Switch
-                                  checked={m.enabled}
-                                  label={m.enabled ? `Disable ${m.display_name}` : `Enable ${m.display_name}`}
-                                  onChange={() => update.mutate({ id: m.id, data: { enabled: !m.enabled } })}
-                                />
-                              </div>
+                              <Switch
+                                size="sm"
+                                checked={m.enabled}
+                                stateLabels={["Enabled", "Disabled"]}
+                                label={`${m.display_name} availability`}
+                                pending={toggleEnabled.isPending && toggleEnabled.variables?.id === m.id}
+                                onChange={(enabled) => toggleEnabled.mutate({ id: m.id, enabled })}
+                              />
                             </td>
                             <td>
                               <div className="flex items-center justify-end gap-0.5">
@@ -419,7 +448,7 @@ export default function AdminModels() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         title="Add a model"
-        description="The ID must match what the provider expects — the router passes it through verbatim."
+        description="The ID must match what the provider expects - the router passes it through verbatim."
         icon={<Plus size={17} />}
         size="lg"
         footer={
@@ -487,7 +516,7 @@ export default function AdminModels() {
         open={!!confirming}
         onClose={() => setConfirming(null)}
         onConfirm={() => confirming && remove.mutate(confirming.id)}
-        title={`Delete “${confirming?.display_name}”?`}
+        title={`Delete "${confirming?.display_name}"?`}
         body="Requests naming this model will fail, and any fallback chain pointing at it will skip it. This cannot be undone."
         confirmLabel="Delete model"
         pending={remove.isPending}

@@ -1,6 +1,6 @@
 /**
  * Login.tsx
- * OAuth sign-in. No password fields — Google and GitHub only.
+ * OAuth sign-in. No password fields - Google and GitHub only.
  *
  * This is the first authenticated-app surface a user sees, so it is painted from
  * the same theme tokens as the dashboard rather than being hardcoded dark.
@@ -47,7 +47,7 @@ export default function Login() {
         <div className="card card-pad">
           <h1 className="text-base font-semibold text-ink text-center">Welcome back</h1>
           <p className="text-xs text-ink-3 text-center mt-1.5 mb-6">
-            We use OAuth only — there is no password to remember or leak.
+            We use OAuth only - there is no password to remember or leak.
           </p>
 
           <div className="space-y-2.5">
