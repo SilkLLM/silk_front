@@ -1,103 +1,140 @@
 /**
  * Notifications.tsx
- * The user's dashboard inbox: key events, earnings, target-reached, trial-low,
- * and system messages. Mark one or all read.
+ * The account inbox: earnings, key events, trial warnings and system messages.
+ * Unread state is carried by weight, a dot and an explicit filter — not by a
+ * colour wash alone.
  */
 
 // File: silkllm-frontend/src/pages/user/Notifications.tsx
 
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckCheck, TrendingUp, AlertTriangle, Target, Zap, Info } from "lucide-react";
+import {
+  AlertTriangle, Bell, CheckCheck, Info, Target, TrendingUp, Zap,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { notificationsApi } from "@/services/api";
+import {
+  Badge, Button, EmptyState, PageHeader, Panel, SegmentedControl, Skeleton,
+} from "@/components/ui";
 
 interface Notification {
   id: string; type: string; title: string; body: string; read: boolean; created_at: string;
 }
 
+/** Icon carries the category; it is paired with the title, never used alone. */
 function iconFor(type: string) {
   switch (type) {
-    case "earning": return <TrendingUp size={18} className="text-silk-gold" />;
-    case "target_reached": return <Target size={18} className="text-warm-olive" />;
-    case "key_suspended": case "key_exhausted": return <AlertTriangle size={18} className="text-red-400" />;
-    case "trial_low": return <Zap size={18} className="text-bright-glow" />;
-    default: return <Info size={18} className="text-warm-grey" />;
+    case "earning":        return { icon: <TrendingUp size={16} />, tone: "text-accent-ink bg-accent/10 border-accent/20" };
+    case "target_reached": return { icon: <Target size={16} />,     tone: "text-success bg-success/10 border-success/20" };
+    case "key_suspended":
+    case "key_exhausted":  return { icon: <AlertTriangle size={16} />, tone: "text-danger bg-danger/10 border-danger/20" };
+    case "trial_low":      return { icon: <Zap size={16} />,        tone: "text-warn bg-warn/10 border-warn/20" };
+    default:               return { icon: <Info size={16} />,       tone: "text-ink-3 bg-ink/[0.05] border-line" };
   }
 }
 
 export default function Notifications() {
   const qc = useQueryClient();
+  const [filter, setFilter] = useState<"all" | "unread">("all");
 
   const { data, isLoading } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => notificationsApi.list().then((r) => r.data),
   });
 
-  const markRead = useMutation({
-    mutationFn: (id: string) => notificationsApi.markRead(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-      qc.invalidateQueries({ queryKey: ["notifications-unread"] });
-    },
-  });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["notifications"] });
+    qc.invalidateQueries({ queryKey: ["notifications-unread"] });
+  };
 
-  const markAll = useMutation({
-    mutationFn: () => notificationsApi.markAllRead(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-      qc.invalidateQueries({ queryKey: ["notifications-unread"] });
-    },
-  });
+  const markRead = useMutation({ mutationFn: (id: string) => notificationsApi.markRead(id), onSuccess: invalidate });
+  const markAll = useMutation({ mutationFn: () => notificationsApi.markAllRead(), onSuccess: invalidate });
 
   const items: Notification[] = data?.notifications || [];
+  const unread = data?.unread || 0;
+  const shown = useMemo(
+    () => (filter === "unread" ? items.filter((n) => !n.read) : items),
+    [items, filter],
+  );
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey">Notifications</h1>
-            <p className="text-warm-grey mt-1">{data?.unread || 0} unread</p>
-          </div>
-          {(data?.unread || 0) > 0 && (
-            <button onClick={() => markAll.mutate()} className="btn-secondary flex items-center gap-2 text-sm">
-              <CheckCheck size={16} /> Mark all read
-            </button>
-          )}
-        </div>
+      <PageHeader
+        title="Notifications"
+        subtitle="Earnings, key events and system messages for your account."
+        meta={unread > 0 ? <Badge tone="brand">{unread} unread</Badge> : <Badge tone="neutral">All caught up</Badge>}
+        actions={
+          unread > 0 ? (
+            <Button size="sm" icon={<CheckCheck size={14} />} loading={markAll.isPending} onClick={() => markAll.mutate()}>
+              Mark all read
+            </Button>
+          ) : undefined
+        }
+      />
 
-        <div className="card">
-          {isLoading ? (
-            <p className="text-warm-grey text-sm">Loading...</p>
-          ) : items.length === 0 ? (
-            <div className="text-center py-10">
-              <Bell size={28} className="text-muted-metal mx-auto mb-3" />
-              <p className="text-warm-grey text-sm">You are all caught up.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {items.map((n) => (
-                <div key={n.id}
-                  onClick={() => !n.read && markRead.mutate(n.id)}
-                  className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                    n.read ? "opacity-60" : "bg-silk-gold/5"
-                  } hover:bg-cloud-grey dark:hover:bg-deep-charcoal`}
-                >
-                  <div className="mt-0.5">{iconFor(n.type)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-deep-charcoal dark:text-cloud-grey">{n.title}</p>
-                    {n.body && <p className="text-xs text-warm-grey mt-0.5">{n.body}</p>}
-                    <p className="text-[11px] text-muted-metal mt-1">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</p>
-                  </div>
-                  {!n.read && <span className="w-2 h-2 rounded-full bg-silk-gold mt-1.5 shrink-0" />}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <Panel
+        title="Inbox"
+        icon={<Bell size={15} />}
+        actions={
+          <SegmentedControl
+            size="sm"
+            value={filter}
+            onChange={setFilter}
+            options={[{ value: "all", label: "All" }, { value: "unread", label: `Unread${unread ? ` (${unread})` : ""}` }]}
+          />
+        }
+      >
+        {isLoading ? (
+          <div className="p-5 space-y-2.5">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
+          </div>
+        ) : !shown.length ? (
+          <EmptyState
+            icon={<Bell size={19} />}
+            title={filter === "unread" ? "Nothing unread" : "No notifications yet"}
+            hint={filter === "unread"
+              ? "You have read everything in your inbox."
+              : "Earnings, key events and trial reminders will appear here."}
+          />
+        ) : (
+          <ul className="divide-y divide-line">
+            {shown.map((n) => {
+              const { icon, tone } = iconFor(n.type);
+              return (
+                <li key={n.id}>
+                  <button
+                    onClick={() => !n.read && markRead.mutate(n.id)}
+                    disabled={n.read}
+                    className={clsx(
+                      "w-full flex items-start gap-3 px-5 sm:px-6 py-4 text-left transition-colors",
+                      !n.read && "hover:bg-sunken cursor-pointer",
+                      n.read && "cursor-default",
+                    )}
+                  >
+                    <span className={clsx("w-9 h-9 rounded-lg border flex items-center justify-center shrink-0", tone)}>
+                      {icon}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className={clsx("block text-sm", n.read ? "text-ink-2" : "text-ink font-medium")}>
+                        {n.title}
+                      </span>
+                      {n.body && <span className="block text-xs text-ink-2 mt-1 leading-relaxed">{n.body}</span>}
+                      <span className="block text-2xs text-ink-3 mt-1.5">
+                        {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                        {!n.read && " · unread"}
+                      </span>
+                    </span>
+                    {!n.read && <span className="w-2 h-2 rounded-full bg-accent mt-2 shrink-0" aria-hidden="true" />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
     </DashboardLayout>
   );
 }

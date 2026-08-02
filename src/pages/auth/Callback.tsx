@@ -47,10 +47,11 @@ export default function Callback() {
   }, [params, navigate, refreshUser]);
 
   return (
-    <div className="min-h-screen bg-deep-charcoal flex items-center justify-center">
+    <div className="min-h-[100dvh] bg-page flex items-center justify-center px-4">
       <div className="text-center">
-        <div className="w-10 h-10 border-4 border-silk-gold border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-warm-grey">Signing you in...</p>
+        <div className="w-9 h-9 border-[3px] border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-sm text-ink">Signing you in…</p>
+        <p className="text-xs text-ink-3 mt-1.5">This only takes a moment.</p>
       </div>
     </div>
   );

@@ -1,20 +1,23 @@
 /**
  * PaymentReminderModal.tsx
- * Listens for the global "silk:need-credit" event (fired when a request fails
- * with 402 Insufficient Balance) and shows a reminder to add credits. Free
- * models are free only during the trial; once the trial allowance is used up a
- * request needs balance, so this nudges the user to top up and keep going.
+ * Listens for the global "silk:need-credit" event (fired on a 402 from the API or
+ * the chat stream) and prompts the user to top up.
+ *
+ * Free models are free only while the trial allowance lasts, which is the part
+ * users are surprised by — so the modal says it explicitly rather than just
+ * reporting the error.
  */
 
 // File: silkllm-frontend/src/components/PaymentReminderModal.tsx
 
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Wallet, X, Sparkles } from "lucide-react";
+import { Sparkles, Wallet } from "lucide-react";
+import { Button, Modal } from "@/components/ui";
 
 export default function PaymentReminderModal() {
   const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState<string>("");
+  const [message, setMessage] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -27,43 +30,40 @@ export default function PaymentReminderModal() {
     return () => window.removeEventListener("silk:need-credit", handler);
   }, []);
 
-  if (!open) return null;
-
-  const goBilling = () => { setOpen(false); navigate("/dashboard/billing"); };
-
-  // Show the server's message when it is clean, otherwise a friendly default.
+  // Show the server's message when it is clean prose, otherwise a friendly default.
   const friendly = message && message.length < 200 && !message.trim().startsWith("{")
     ? message
     : "You are out of credit and your free trial does not cover this request. Add credits to keep going.";
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-dark border border-silk-gold/30 shadow-2xl p-6">
-        <button onClick={() => setOpen(false)}
-          className="absolute top-3 right-3 text-warm-grey hover:text-silk-gold p-1" aria-label="Close">
-          <X size={18} />
-        </button>
-        <div className="w-12 h-12 rounded-xl bg-silk-gold/15 flex items-center justify-center mb-4">
-          <Wallet size={22} className="text-silk-gold" />
-        </div>
-        <h2 className="text-lg font-bold text-deep-charcoal dark:text-cloud-grey">Add credits to continue</h2>
-        <p className="text-sm text-warm-grey mt-2 leading-relaxed">{friendly}</p>
-        <div className="mt-3 rounded-lg bg-cloud-grey dark:bg-deep-charcoal px-3 py-2.5 flex items-start gap-2">
-          <Sparkles size={14} className="text-silk-gold mt-0.5 shrink-0" />
-          <p className="text-xs text-warm-grey">
-            Free models are free during your trial. Once the daily trial allowance is used up, every request,
-            including free models, draws from your balance.
-          </p>
-        </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={() => setOpen(false)} className="btn-secondary flex-1 text-sm">Not now</button>
-          <button onClick={goBilling} className="btn-primary flex-1 text-sm flex items-center justify-center gap-2">
-            <Wallet size={15} /> Add credits
-          </button>
-        </div>
+    <Modal
+      open={open}
+      onClose={() => setOpen(false)}
+      title="Add credits to continue"
+      icon={<Wallet size={18} />}
+      size="sm"
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => setOpen(false)}>Not now</Button>
+          <Button
+            variant="primary"
+            icon={<Wallet size={15} />}
+            onClick={() => { setOpen(false); navigate("/dashboard/billing"); }}
+          >
+            Add credits
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-ink-2 leading-relaxed">{friendly}</p>
+      <div className="mt-4 rounded-xl border border-line bg-sunken px-4 py-3 flex items-start gap-2.5">
+        <Sparkles size={14} className="text-accent-ink mt-0.5 shrink-0" />
+        <p className="text-xs text-ink-2 leading-relaxed">
+          Free models are free during your trial. Once the daily trial allowance is used up, every
+          request — including free models — draws from your balance.
+        </p>
       </div>
-    </div>
+    </Modal>
   );
 }
 

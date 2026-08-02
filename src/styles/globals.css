@@ -1,5 +1,15 @@
 /* File: silkllm-frontend/src/styles/globals.css */
-/* Global styles - Tailwind directives + font imports + base overrides */
+/*
+ * Global styles: font imports, the theme token layer, and the small set of
+ * component classes the app shell is built from.
+ *
+ * The token layer is the important part. Every app surface is painted from
+ * `--c-*` custom properties, so switching themes swaps one block of values
+ * rather than toggling hundreds of `dark:` utilities. Light mode is a warm
+ * off-white (#F6F5F2 page / white cards) rather than a cold grey with cream
+ * cards; dark mode sits deeper than before (#0D0F10 page / #17191A cards) so
+ * elevation actually reads.
+ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -8,15 +18,75 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── Light theme (default) ─────────────────────────────────────────────── */
   :root {
-    --silk-gold:        #D29A2D;
-    --electric-yellow:  #D0C51E;
-    --warm-olive:       #B5B86B;
-    --soft-cream:       #FEF1DC;
-    --bright-glow:      #FAED26;
-    --cloud-grey:       #EDEFF0;
-    --deep-charcoal:    #191B1C;
-    --slate-dark:       #383B3D;
+    color-scheme: light;
+
+    --c-page:        246 245 242;   /* #F6F5F2 warm off-white, never glaring */
+    --c-surface:     255 255 255;   /* #FFFFFF cards */
+    --c-sunken:      250 249 246;   /* #FAF9F6 wells, table headers, inputs */
+    --c-raised:      255 255 255;   /* #FFFFFF popovers & modals */
+    --c-line:        229 226 219;   /* #E5E2DB hairlines */
+    --c-line-strong: 213 209 199;   /* #D5D1C7 */
+    --c-ink:          26  25  24;   /* #1A1918  17.6:1 on surface */
+    --c-ink-2:        87  83  78;   /* #57534E   7.6:1 */
+    --c-ink-3:       138 133 125;   /* #8A857D   3.7:1 — meta text only */
+    --c-accent:      210 154  45;   /* #D29A2D brand fill */
+    --c-accent-ink:  152 105  15;   /* #98690F  4.8:1 — brand as readable text */
+    --c-on-accent:    26  25  24;   /* dark ink on a gold fill (7:1) */
+    --c-success:      15 122  61;   /* #0F7A3D  5.4:1 */
+    --c-warn:        138  90   8;   /* #8A5A08  5.9:1 */
+    --c-danger:      196  52  47;   /* #C4342F  5.4:1 */
+    --c-shadow:       26  25  24;
+
+    /* Chart tokens — the validated categorical order, light steps.
+       Worst adjacent CVD ΔE 9.2, worst adjacent normal-vision ΔE 18.2. */
+    --chart-1: #D29A2D;
+    --chart-2: #e87ba4;
+    --chart-3: #008300;
+    --chart-4: #2a78d6;
+    --chart-5: #e34948;
+    --chart-6: #4a3aa7;
+    --chart-7: #1baf7a;
+    --chart-8: #eb6834;
+    --chart-grid: #E8E5DE;
+    --chart-axis: #D5D1C7;
+    --chart-tick: #8A857D;
+  }
+
+  /* ── Dark theme ────────────────────────────────────────────────────────── */
+  .dark {
+    color-scheme: dark;
+
+    --c-page:         13  15  16;   /* #0D0F10 */
+    --c-surface:      23  25  26;   /* #17191A */
+    --c-sunken:       18  20  21;   /* #121415 */
+    --c-raised:       30  33  34;   /* #1E2122 */
+    --c-line:         42  46  48;   /* #2A2E30 */
+    --c-line-strong:  58  63  65;   /* #3A3F41 */
+    --c-ink:         242 241 238;   /* #F2F1EE 15.6:1 */
+    --c-ink-2:       168 164 156;   /* #A8A49C  7.1:1 */
+    --c-ink-3:       124 120 114;   /* #7C7872  4.0:1 */
+    --c-accent:      210 154  45;
+    --c-accent-ink:  229 178  82;   /* #E5B252  9.1:1 */
+    --c-on-accent:    12  12  12;
+    --c-success:      63 191 110;   /* #3FBF6E  7.5:1 */
+    --c-warn:        232 185  63;   /* #E8B93F  9.6:1 */
+    --c-danger:      240 117 112;   /* #F07570  6.3:1 */
+    --c-shadow:        0   0   0;
+
+    /* Same eight hues, stepped for the dark surface — not an automatic flip. */
+    --chart-1: #BC8A20;
+    --chart-2: #d55181;
+    --chart-3: #008300;
+    --chart-4: #3987e5;
+    --chart-5: #e66767;
+    --chart-6: #9085e9;
+    --chart-7: #199e70;
+    --chart-8: #d95926;
+    --chart-grid: #24282A;
+    --chart-axis: #343A3C;
+    --chart-tick: #7C7872;
   }
 
   * { box-sizing: border-box; }
@@ -24,61 +94,135 @@
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
-    @apply bg-cloud-grey text-deep-charcoal font-sans;
+    @apply bg-page text-ink font-sans antialiased;
+    /* Theme flips shouldn't strobe. */
+    transition: background-color 180ms ease, color 180ms ease;
   }
 
-  .dark body {
-    @apply bg-deep-charcoal text-cloud-grey;
+  /* Consistent focus treatment everywhere, keyboard-only. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/55 ring-offset-2 ring-offset-page;
   }
 
-  /* Respect prefers-reduced-motion */
+  /* Native controls follow the theme rather than defaulting to light chrome. */
+  input, select, textarea, button { font: inherit; }
+  input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--c-accent)); }
+  input[type="range"] { accent-color: rgb(var(--c-accent)); }
+
+  ::selection { background: rgb(var(--c-accent) / 0.24); }
+
   @media (prefers-reduced-motion: reduce) {
     *, ::before, ::after {
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }
 
 @layer components {
+  /* ── Buttons ───────────────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium
+           px-4 h-10 transition-all duration-150 select-none
+           disabled:opacity-45 disabled:pointer-events-none whitespace-nowrap;
+  }
   .btn-primary {
-    @apply bg-silk-gold hover:bg-brand-hover text-white font-semibold px-5 py-2.5 rounded-lg
-           transition-colors duration-200 min-h-[44px] min-w-[44px];
+    @apply btn bg-accent text-on-accent shadow-xs
+           hover:brightness-[1.06] active:brightness-95;
   }
-
   .btn-secondary {
-    @apply border border-silk-gold text-silk-gold hover:bg-silk-gold hover:text-white
-           font-semibold px-5 py-2.5 rounded-lg transition-colors duration-200 min-h-[44px];
+    @apply btn bg-surface text-ink border border-line shadow-xs
+           hover:bg-sunken hover:border-line-strong active:brightness-[0.98];
+  }
+  .btn-ghost {
+    @apply btn text-ink-2 hover:text-ink hover:bg-ink/[0.06] active:bg-ink/[0.09];
+  }
+  .btn-danger {
+    @apply btn bg-danger text-white shadow-xs hover:brightness-110 active:brightness-95;
   }
 
+  /* ── Surfaces ──────────────────────────────────────────────────────────── */
   .card {
-    @apply bg-soft-cream dark:bg-slate-dark rounded-xl shadow-sm border border-cloud-grey dark:border-muted-metal p-6;
+    @apply bg-surface rounded-card border border-line shadow-card;
   }
+  .card-pad { @apply p-5 sm:p-6; }
 
+  /* ── Form controls ─────────────────────────────────────────────────────── */
   .input {
-    @apply w-full bg-white dark:bg-deep-charcoal border border-cloud-grey dark:border-muted-metal
-           rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-silk-gold
-           transition-shadow duration-200 min-h-[44px];
+    @apply w-full bg-surface text-ink border border-line rounded-lg
+           px-3.5 h-10 text-sm placeholder:text-ink-3
+           transition-[border-color,box-shadow] duration-150
+           hover:border-line-strong
+           focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  textarea.input { @apply h-auto py-2.5 leading-relaxed; }
+  select.input {
+    @apply appearance-none pr-9 cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A857D' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+  }
+  .dark select.input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237C7872' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
 
-  .badge-warning { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-bright-glow text-deep-charcoal; }
-  .badge-success { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-warm-olive text-white; }
-  .badge-error   { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500 text-white; }
-  .badge-info    { @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cloud-grey text-deep-charcoal; }
+  /* ── Badges ────────────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-medium
+           border whitespace-nowrap;
+  }
+  .badge-neutral { @apply badge bg-ink/[0.05] text-ink-2 border-line; }
+  .badge-info    { @apply badge bg-ink/[0.05] text-ink-2 border-line; }
+  .badge-brand   { @apply badge bg-accent/10 text-accent-ink border-accent/25; }
+  .badge-success { @apply badge bg-success/10 text-success border-success/25; }
+  .badge-warning { @apply badge bg-warn/10 text-warn border-warn/25; }
+  .badge-error   { @apply badge bg-danger/10 text-danger border-danger/25; }
+
+  /* ── Data tables ───────────────────────────────────────────────────────── */
+  .table-shell { @apply w-full text-sm border-collapse; }
+  .table-shell thead th {
+    @apply text-left px-4 py-2.5 text-2xs font-semibold uppercase tracking-wider
+           text-ink-3 bg-sunken border-b border-line whitespace-nowrap;
+  }
+  .table-shell tbody td {
+    @apply px-4 py-3 border-b border-line/70 align-middle;
+  }
+  .table-shell tbody tr:last-child td { @apply border-b-0; }
+  .table-shell tbody tr { @apply transition-colors; }
+  .table-shell tbody tr:hover { @apply bg-ink/[0.025]; }
+  .num { font-variant-numeric: tabular-nums; }
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+@layer utilities {
+  /* Horizontal scroll containers that shouldn't push the page wide. */
+  .scroll-x { @apply overflow-x-auto; -webkit-overflow-scrolling: touch; }
+
+  /* Hairline separators that read correctly on both themes. */
+  .divide-line > * + * { border-color: rgb(var(--c-line)); }
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--warm-grey, #C2C9CC); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--silk-gold); }
-
-/* Code blocks */
-code, pre {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-ink) / 0.16);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-ink) / 0.28); background-clip: content-box; }
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--c-ink) / 0.2) transparent; }
+
+/* ── Code ───────────────────────────────────────────────────────────────── */
+code, pre { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+
+/* Recharts: kill the default focus rectangle on the active surface. */
+.recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
 
 /* EOF silkllm-frontend/src/styles/globals.css */

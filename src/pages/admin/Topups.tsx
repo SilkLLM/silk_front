@@ -1,21 +1,29 @@
 /**
- * Topups.tsx
- * Admin page - record manual provider top-ups and view top-up history.
+ * Topups.tsx (admin)
+ * Record credit purchased directly from a provider so balance tracking and the
+ * low-credit alert threshold stay accurate. SilkLLM never buys provider credit
+ * itself, which is why this is a manual ledger.
  */
 
 // File: silkllm-frontend/src/pages/admin/Topups.tsx
 
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { PlusCircle, Clock } from "lucide-react";
+import { Clock, Info, PlusCircle, Receipt } from "lucide-react";
 import toast from "react-hot-toast";
+import { format } from "date-fns";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
-import { format } from "date-fns";
+import {
+  Button, Callout, EmptyState, Field, Input, PageHeader, Panel, Select, Skeleton, StatTile,
+} from "@/components/ui";
+import { usdShort } from "@/lib/charts";
+
+const EMPTY = { provider_id: "", amount: "", remaining_after: "", note: "" };
 
 export default function AdminTopups() {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ provider_id: "", amount: "", remaining_after: "", note: "" });
+  const [form, setForm] = useState(EMPTY);
 
   const { data: providers } = useQuery({
     queryKey: ["admin-providers"],
@@ -27,7 +35,7 @@ export default function AdminTopups() {
     queryFn: () => adminApi.topups.list().then((r) => r.data),
   });
 
-  const recordMutation = useMutation({
+  const record = useMutation({
     mutationFn: () => adminApi.topups.record({
       provider_id: form.provider_id,
       amount: parseFloat(form.amount),
@@ -35,111 +43,119 @@ export default function AdminTopups() {
       note: form.note || undefined,
     }),
     onSuccess: () => {
-      toast.success("Top-up recorded and provider balance updated.");
-      setForm({ provider_id: "", amount: "", remaining_after: "", note: "" });
+      toast.success("Top-up recorded and the provider balance updated.");
+      setForm(EMPTY);
       qc.invalidateQueries({ queryKey: ["admin-topups"] });
       qc.invalidateQueries({ queryKey: ["admin-providers"] });
     },
-    onError: () => toast.error("Failed to record top-up."),
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Could not record the top-up."),
   });
 
-  const canSubmit = form.provider_id && form.amount && form.remaining_after;
+  const list = topups || [];
+  const total = list.reduce((s: number, t: any) => s + (t.amount || 0), 0);
+  const last = list[0];
+  const valid = form.provider_id && form.amount !== "" && form.remaining_after !== "";
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey">Manual Top-Up Recording</h1>
-          <p className="text-warm-grey mt-1">
-            After purchasing credits directly from a provider, record it here to keep balance tracking accurate.
-          </p>
-        </div>
+      <PageHeader
+        title="Top-Ups"
+        subtitle="Record credit you bought directly from a provider so balance tracking and alerts stay accurate."
+      />
 
-        {/* Info box */}
-        <div className="card border-silk-gold/30 bg-silk-gold/5">
-          <p className="text-sm text-warm-grey leading-relaxed">
-            <strong className="text-silk-gold">How this works:</strong> SilkLLM does not automatically purchase provider credits.
-            You buy credits directly from OpenAI, Anthropic, etc., then record the transaction here.
-            This updates the system's balance tracker and resets the low-credit alert threshold.
-          </p>
-        </div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatTile label="Total recorded" value={usdShort(total)} icon={<Receipt size={14} />} accent hint="All providers" />
+        <StatTile label="Top-ups logged" value={list.length} icon={<PlusCircle size={14} />} />
+        <StatTile
+          label="Most recent"
+          value={last ? usdShort(last.amount) : "—"}
+          icon={<Clock size={14} />}
+          hint={last ? `${last.provider_id} · ${format(new Date(last.created_at), "MMM d")}` : "Nothing yet"}
+        />
+      </div>
 
-        {/* Record form */}
-        <div className="card">
-          <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey mb-5 flex items-center gap-2">
-            <PlusCircle size={18} className="text-silk-gold" /> Record a Top-Up
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-warm-grey mb-1.5">Provider *</label>
-              <select value={form.provider_id}
-                      onChange={(e) => setForm(f => ({ ...f, provider_id: e.target.value }))}
-                      className="input">
-                <option value="">Select provider...</option>
-                {providers?.map((p: any) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+      <Callout tone="info" icon={<Info size={17} />} title="How this works">
+        <p>
+          SilkLLM does not purchase provider credit automatically. Buy it directly from OpenAI, Anthropic
+          and the rest, then record the transaction here — that resets the balance tracker and the
+          low-credit alert threshold for that provider.
+        </p>
+      </Callout>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-4 items-start">
+        <Panel title="Record a top-up" icon={<PlusCircle size={15} />}>
+          <div className="px-5 sm:px-6 py-5 space-y-4">
+            <Field label="Provider" required>
+              <Select value={form.provider_id} onChange={(e) => setForm((f) => ({ ...f, provider_id: e.target.value }))}>
+                <option value="">Select a provider…</option>
+                {(providers || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+            </Field>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Field label="Amount added (USD)" required>
+                <Input
+                  type="number" step="0.01" min="0" className="num"
+                  placeholder="500.00"
+                  value={form.amount}
+                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                />
+              </Field>
+              <Field label="Balance after (USD)" required hint="As shown in the provider's own dashboard.">
+                <Input
+                  type="number" step="0.01" min="0" className="num"
+                  placeholder="500.00"
+                  value={form.remaining_after}
+                  onChange={(e) => setForm((f) => ({ ...f, remaining_after: e.target.value }))}
+                />
+              </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-warm-grey mb-1.5">Amount Added (USD) *</label>
-                <input type="number" step="0.01" min="0" value={form.amount}
-                       onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
-                       className="input" placeholder="500.00" />
-              </div>
-              <div>
-                <label className="block text-sm text-warm-grey mb-1.5">Balance After Top-Up (USD) *</label>
-                <input type="number" step="0.01" min="0" value={form.remaining_after}
-                       onChange={(e) => setForm(f => ({ ...f, remaining_after: e.target.value }))}
-                       className="input" placeholder="500.00" />
-                <p className="text-xs text-warm-grey mt-1">As shown in the provider's dashboard</p>
-              </div>
-            </div>
+            <Field label="Note" hint="Optional — invoice number, who paid, anything worth remembering.">
+              <Input
+                placeholder="Added $500 via OpenAI billing, invoice #12345"
+                value={form.note}
+                onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+              />
+            </Field>
 
-            <div>
-              <label className="block text-sm text-warm-grey mb-1.5">Note (optional)</label>
-              <input type="text" value={form.note}
-                     onChange={(e) => setForm(f => ({ ...f, note: e.target.value }))}
-                     className="input" placeholder="e.g., Added $500 via OpenAI billing, invoice #12345" />
-            </div>
-
-            <button onClick={() => recordMutation.mutate()}
-                    disabled={!canSubmit || recordMutation.isPending}
-                    className="btn-primary w-full disabled:opacity-50">
-              {recordMutation.isPending ? "Recording..." : "Record Top-Up"}
-            </button>
+            <Button
+              variant="primary"
+              className="w-full"
+              disabled={!valid}
+              loading={record.isPending}
+              onClick={() => record.mutate()}
+            >
+              Record top-up
+            </Button>
           </div>
-        </div>
+        </Panel>
 
-        {/* History */}
-        <div className="card">
-          <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey mb-4 flex items-center gap-2">
-            <Clock size={18} className="text-silk-gold" /> Top-Up History
-          </h2>
+        <Panel title="History" icon={<Clock size={15} />}>
           {isLoading ? (
-            <p className="text-warm-grey text-sm">Loading...</p>
-          ) : !topups?.length ? (
-            <p className="text-warm-grey text-sm">No top-ups recorded yet.</p>
+            <div className="p-5 space-y-2.5">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
+          ) : !list.length ? (
+            <EmptyState icon={<Receipt size={19} />} title="No top-ups recorded" hint="Log your first provider purchase to start tracking balances." />
           ) : (
-            <div className="space-y-3">
-              {topups.map((t: any) => (
-                <div key={t.id} className="flex items-start justify-between gap-4 py-3 border-b border-cloud-grey dark:border-muted-metal last:border-0">
-                  <div>
-                    <p className="text-sm font-medium text-deep-charcoal dark:text-cloud-grey capitalize">{t.provider_id}</p>
-                    {t.note && <p className="text-xs text-warm-grey mt-0.5">{t.note}</p>}
-                    <p className="text-xs text-warm-grey mt-0.5">{format(new Date(t.created_at), "MMM d, yyyy HH:mm")}</p>
+            <ul className="divide-y divide-line">
+              {list.map((t: any) => (
+                <li key={t.id} className="flex items-start justify-between gap-4 px-5 sm:px-6 py-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-ink capitalize">{t.provider_id}</p>
+                    {t.note && <p className="text-xs text-ink-2 mt-0.5 leading-relaxed">{t.note}</p>}
+                    <p className="text-2xs text-ink-3 mt-1 num">
+                      {format(new Date(t.created_at), "MMM d, yyyy · HH:mm")}
+                    </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-green-400 font-semibold text-sm">+${t.amount.toFixed(2)}</p>
-                    <p className="text-xs text-warm-grey">Balance after: ${t.remaining_after.toFixed(2)}</p>
+                    <p className="text-sm font-medium text-success num">+${t.amount.toFixed(2)}</p>
+                    <p className="text-2xs text-ink-3 num mt-0.5">balance ${t.remaining_after.toFixed(2)}</p>
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </div>
+        </Panel>
       </div>
     </DashboardLayout>
   );

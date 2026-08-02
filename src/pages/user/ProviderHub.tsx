@@ -1,20 +1,29 @@
 /**
  * ProviderHub.tsx
- * BYOK marketplace, user side. Deposit and manage your own provider keys, see
- * per-key earnings and requests served. A public key is used only by our backend
- * to serve others (you earn credits); it is never shown to other users. This page
- * explains, in plain language, exactly what you are opting into.
+ * The BYOK marketplace from the depositor's side: deposit provider keys, control
+ * how they are used, and watch what they earn.
+ *
+ * The deposit form is a modal rather than an always-open block — most visits are
+ * to check earnings, not to add a key. The economics sit next to the form,
+ * because "public" is the consequential choice on this page.
  */
 
 // File: silkllm-frontend/src/pages/user/ProviderHub.tsx
 
 import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Coins, Plus, Trash2, Globe, Lock, Info, TrendingUp } from "lucide-react";
+import {
+  Coins, Globe, Info, Lock, Plus, Server, Trash2, TrendingUp, Zap,
+} from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { providerKeysApi, modelsApi } from "@/services/api";
+import {
+  Badge, Button, Callout, Checkbox, ConfirmDialog, EmptyState, Field, IconButton,
+  Input, Meter, Modal, PageHeader, Panel, Select, Skeleton, StatTile, Switch,
+} from "@/components/ui";
+import { compact, usdPrecise } from "@/lib/charts";
 
 interface ProviderKey {
   id: string; provider_id: string; label: string;
@@ -24,15 +33,21 @@ interface ProviderKey {
   earned_credits_total: number; requests_served: number; provider_cost_served: number;
 }
 
-function money(n: number) { return `$${(n || 0).toFixed(4)}`; }
+const EMPTY_FORM = {
+  provider_id: "openai",
+  api_key: "",
+  label: "My key",
+  is_public: true,
+  serve_owner_with_own_key: true,
+  declared_budget_usd: 0,
+};
 
 export default function ProviderHub() {
   const qc = useQueryClient();
-  const [form, setForm] = useState({
-    provider_id: "openai", api_key: "", label: "My key",
-    is_public: true, serve_owner_with_own_key: true, declared_budget_usd: 0,
-  });
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [consent, setConsent] = useState(false);
+  const [confirming, setConfirming] = useState<ProviderKey | null>(null);
 
   const { data: keys, isLoading } = useQuery<ProviderKey[]>({
     queryKey: ["provider-keys"],
@@ -44,181 +59,275 @@ export default function ProviderHub() {
     queryFn: () => modelsApi.list().then((r) => r.data.models),
   });
 
-  const providers = useMemo<string[]>(() => {
-    const set = new Set<string>((models || []).map((m: any) => m.provider));
-    return Array.from(set).sort();
-  }, [models]);
+  const providers = useMemo<string[]>(
+    () => Array.from(new Set<string>((models || []).map((m: any) => m.provider))).sort(),
+    [models],
+  );
 
   const deposit = useMutation({
     mutationFn: () => providerKeysApi.deposit(form).then((r) => r.data),
     onSuccess: () => {
-      toast.success("Key deposited");
-      setForm((f) => ({ ...f, api_key: "", label: "My key" }));
+      toast.success("Key deposited and encrypted.");
+      setForm(EMPTY_FORM);
       setConsent(false);
+      setDepositOpen(false);
       qc.invalidateQueries({ queryKey: ["provider-keys"] });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || "Failed to deposit key"),
+    onError: (e: any) => toast.error(e?.response?.data?.detail || "Could not deposit the key."),
   });
 
   const update = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => providerKeysApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["provider-keys"] }); },
-    onError: () => toast.error("Failed to update key"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["provider-keys"] }),
+    onError: () => toast.error("Could not update the key."),
   });
 
   const revoke = useMutation({
     mutationFn: (id: string) => providerKeysApi.revoke(id),
-    onSuccess: () => { toast.success("Key revoked"); qc.invalidateQueries({ queryKey: ["provider-keys"] }); },
-    onError: () => toast.error("Failed to revoke key"),
+    onSuccess: () => {
+      toast.success("Key revoked.");
+      qc.invalidateQueries({ queryKey: ["provider-keys"] });
+    },
+    onError: () => toast.error("Could not revoke the key."),
   });
 
-  const totalEarned = (keys || []).reduce((s, k) => s + (k.earned_credits_total || 0), 0);
-  const totalServed = (keys || []).reduce((s, k) => s + (k.requests_served || 0), 0);
+  const list = keys || [];
+  const earned = list.reduce((s, k) => s + (k.earned_credits_total || 0), 0);
+  const served = list.reduce((s, k) => s + (k.requests_served || 0), 0);
+  const delivered = list.reduce((s, k) => s + (k.provider_cost_served || 0), 0);
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey">Provider Hub</h1>
-          <p className="text-warm-grey mt-1">Bring your own provider keys. Share a public key and earn credits when others use it, spendable on any model.</p>
-        </div>
+      <PageHeader
+        title="Provider Hub"
+        subtitle="Deposit your own provider keys. Share one publicly and earn SilkLLM credits whenever the router serves someone with it."
+        actions={
+          <Button variant="primary" icon={<Plus size={15} />} onClick={() => setDepositOpen(true)}>
+            Deposit a key
+          </Button>
+        }
+      />
 
-        {/* Earnings summary */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="card">
-            <p className="text-xs text-warm-grey uppercase tracking-wide">Credits earned</p>
-            <p className="text-2xl font-bold text-silk-gold mt-1">{money(totalEarned)}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatTile label="Credits earned" value={usdPrecise(earned)} icon={<Coins size={14} />} accent hint="Spendable on any model" />
+        <StatTile label="Requests served" value={compact(served)} icon={<Zap size={14} />} hint="For other users" />
+        <StatTile label="Provider cost delivered" value={usdPrecise(delivered)} icon={<TrendingUp size={14} />} hint="Charged to your providers" />
+        <StatTile label="Deposited keys" value={list.length} icon={<Server size={14} />} hint={`${list.filter((k) => k.is_public).length} public`} />
+      </div>
+
+      <Callout tone="brand" icon={<Info size={17} />} title="How the marketplace pays you">
+        <p>
+          <strong className="text-ink">Public</strong> keys are used only by the routing engine to serve
+          other users — they are never shown to anyone. You earn 75% of the provider cost as SilkLLM
+          credits, spendable on any model at the normal 10% markup.
+        </p>
+        <p>
+          <strong className="text-ink">Private</strong> keys serve only you, at a 25% markup. Using your own
+          public key for your own requests costs the normal 10% and earns nothing.
+        </p>
+        <p>
+          Turn off “serve my own requests” to be routed as if you had deposited nothing, while your public
+          key keeps serving the marketplace. Free models cost nothing and earn nothing. Your secret is
+          encrypted at rest and never shown again.
+        </p>
+      </Callout>
+
+      <Panel
+        title="Your keys"
+        description={list.length ? `${list.length} deposited` : undefined}
+        icon={<Coins size={15} />}
+        actions={
+          list.length > 0 ? (
+            <Button size="sm" icon={<Plus size={14} />} onClick={() => setDepositOpen(true)}>Add another</Button>
+          ) : undefined
+        }
+      >
+        {isLoading ? (
+          <div className="p-5 space-y-2.5">
+            {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
           </div>
-          <div className="card">
-            <p className="text-xs text-warm-grey uppercase tracking-wide">Requests served</p>
-            <p className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey mt-1">{totalServed}</p>
-          </div>
-          <div className="card">
-            <p className="text-xs text-warm-grey uppercase tracking-wide">Active keys</p>
-            <p className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey mt-1">{(keys || []).length}</p>
-          </div>
-        </div>
+        ) : !list.length ? (
+          <EmptyState
+            icon={<Coins size={19} />}
+            title="No deposited keys yet"
+            hint="Deposit a provider key to start earning credits when the marketplace routes through it."
+            action={<Button variant="primary" icon={<Plus size={14} />} onClick={() => setDepositOpen(true)}>Deposit a key</Button>}
+          />
+        ) : (
+          <ul className="divide-y divide-line">
+            {list.map((k) => {
+              const budget = k.declared_budget_usd > 0;
+              const pct = budget ? Math.min(100, (k.provider_cost_served / k.declared_budget_usd) * 100) : 0;
+              return (
+                <li key={k.id} className="px-5 sm:px-6 py-4">
+                  <div className="flex items-start gap-3 flex-wrap">
+                    <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+                      k.is_public ? "bg-accent/10 border-accent/20 text-accent-ink" : "bg-ink/[0.04] border-line text-ink-3"
+                    }`}>
+                      {k.is_public ? <Globe size={16} /> : <Lock size={16} />}
+                    </span>
 
-        {/* How it works */}
-        <div className="card border-silk-gold/30 bg-silk-gold/5">
-          <div className="flex items-start gap-3">
-            <Info size={18} className="text-silk-gold shrink-0 mt-0.5" />
-            <div className="text-sm text-warm-grey space-y-1.5">
-              <p><strong className="text-deep-charcoal dark:text-cloud-grey">Public</strong> keys are used only by our routing engine to serve other users. They are never shown to anyone. You earn 75% of the provider cost as SilkLLM credits, which you spend on any model at the normal 10% markup.</p>
-              <p><strong className="text-deep-charcoal dark:text-cloud-grey">Private</strong> keys serve only you (25% markup). Using your own public key for your own requests costs the normal 10% and earns nothing.</p>
-              <p>Turn off "use my key for my own requests" to be served as if you deposited nothing, while your public key still serves the marketplace. Free models cost nothing and earn nothing. Your secret is encrypted and never shown again.</p>
-            </div>
-          </div>
-        </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-ink truncate">{k.label}</span>
+                        <Badge tone="neutral">{k.provider_id}</Badge>
+                        <Badge tone={k.status === "active" ? "success" : "warning"}>{k.status}</Badge>
+                        {k.is_free_key && <Badge tone="brand">free key</Badge>}
+                      </div>
+                      <p className="text-2xs text-ink-3 mt-0.5 num">
+                        Added {format(new Date(k.created_at), "MMM d, yyyy")}
+                        {k.last_used && ` · last used ${format(new Date(k.last_used), "MMM d")}`}
+                      </p>
+                    </div>
 
-        {/* Deposit form */}
-        <div className="card">
-          <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey mb-4 flex items-center gap-2">
-            <Plus size={18} className="text-silk-gold" /> Deposit a key
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs text-warm-grey">Provider</span>
-              <select className="input mt-1" value={form.provider_id}
-                onChange={(e) => setForm({ ...form, provider_id: e.target.value })}>
-                {providers.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs text-warm-grey">Label</span>
-              <input className="input mt-1" value={form.label}
-                onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="My key" />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="text-xs text-warm-grey">API key (encrypted, never shown again)</span>
-              <input className="input mt-1 font-mono" type="password" value={form.api_key}
-                onChange={(e) => setForm({ ...form, api_key: e.target.value })} placeholder="sk-..." />
-            </label>
-            <label className="block">
-              <span className="text-xs text-warm-grey">Declared budget (USD, 0 = uncapped)</span>
-              <input className="input mt-1" type="number" min={0} step="0.01" value={form.declared_budget_usd}
-                onChange={(e) => setForm({ ...form, declared_budget_usd: parseFloat(e.target.value) || 0 })} />
-            </label>
-            <div className="flex flex-col justify-center gap-2">
-              <label className="flex items-center gap-2 text-sm text-deep-charcoal dark:text-cloud-grey">
-                <input type="checkbox" checked={form.is_public}
-                  onChange={(e) => setForm({ ...form, is_public: e.target.checked })} />
-                Public (share and earn)
-              </label>
-              <label className="flex items-center gap-2 text-sm text-deep-charcoal dark:text-cloud-grey">
-                <input type="checkbox" checked={form.serve_owner_with_own_key}
-                  onChange={(e) => setForm({ ...form, serve_owner_with_own_key: e.target.checked })} />
-                Use my key for my own requests
-              </label>
-            </div>
-          </div>
-
-          <label className="flex items-start gap-2 mt-4 text-xs text-warm-grey">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5" />
-            I understand this key will be used per the rules above, that a public key may serve other users (never visible to them), and that I am responsible for my provider's terms.
-          </label>
-
-          <button
-            onClick={() => deposit.mutate()}
-            disabled={!form.api_key.trim() || !consent || deposit.isPending}
-            className="btn-primary mt-4 disabled:opacity-50"
-          >
-            {deposit.isPending ? "Depositing..." : "Deposit key"}
-          </button>
-        </div>
-
-        {/* Keys list */}
-        <div className="card">
-          <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey mb-4 flex items-center gap-2">
-            <Coins size={18} className="text-silk-gold" /> Your keys
-          </h2>
-          {isLoading ? (
-            <p className="text-warm-grey text-sm">Loading...</p>
-          ) : (keys || []).length === 0 ? (
-            <p className="text-warm-grey text-sm">No deposited keys yet. Add one above to start earning.</p>
-          ) : (
-            <div className="space-y-3">
-              {(keys || []).map((k) => (
-                <div key={k.id} className="p-4 rounded-lg bg-cloud-grey dark:bg-deep-charcoal">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {k.is_public ? <Globe size={16} className="text-silk-gold" /> : <Lock size={16} className="text-warm-grey" />}
-                    <span className="font-medium text-sm text-deep-charcoal dark:text-cloud-grey">{k.label}</span>
-                    <span className="badge-info">{k.provider_id}</span>
-                    <span className={k.status === "active" ? "badge-success" : "badge-warning"}>{k.status}</span>
-                    {k.is_free_key && <span className="badge-info">free key</span>}
-                    <div className="flex-1" />
-                    <button
-                      onClick={() => window.confirm(`Revoke "${k.label}"?`) && revoke.mutate(k.id)}
-                      className="text-warm-grey hover:text-red-400 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                      title="Revoke"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <IconButton label={`Revoke ${k.label}`} size={34} tone="danger" onClick={() => setConfirming(k)}>
+                      <Trash2 size={15} />
+                    </IconButton>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-xs">
-                    <div><span className="text-warm-grey">Earned</span><br /><span className="text-silk-gold font-semibold flex items-center gap-1"><TrendingUp size={12} />{money(k.earned_credits_total)}</span></div>
-                    <div><span className="text-warm-grey">Served</span><br /><span className="text-deep-charcoal dark:text-cloud-grey">{k.requests_served} reqs</span></div>
-                    <div><span className="text-warm-grey">Delivered</span><br /><span className="text-deep-charcoal dark:text-cloud-grey">{money(k.provider_cost_served)}{k.declared_budget_usd > 0 ? ` / $${k.declared_budget_usd}` : ""}</span></div>
-                    <div><span className="text-warm-grey">Added</span><br /><span className="text-deep-charcoal dark:text-cloud-grey">{format(new Date(k.created_at), "MMM d")}</span></div>
-                  </div>
-                  <div className="flex items-center gap-4 mt-3 text-xs">
-                    <label className="flex items-center gap-1.5 text-warm-grey cursor-pointer">
-                      <input type="checkbox" checked={k.is_public}
-                        onChange={(e) => update.mutate({ id: k.id, data: { is_public: e.target.checked } })} />
-                      Public
+
+                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                    <div>
+                      <dt className="text-2xs text-ink-3 uppercase tracking-wide">Earned</dt>
+                      <dd className="text-sm font-medium text-accent-ink num mt-0.5">{usdPrecise(k.earned_credits_total)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs text-ink-3 uppercase tracking-wide">Served</dt>
+                      <dd className="text-sm font-medium text-ink num mt-0.5">{compact(k.requests_served)} reqs</dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs text-ink-3 uppercase tracking-wide">Delivered</dt>
+                      <dd className="text-sm font-medium text-ink num mt-0.5">{usdPrecise(k.provider_cost_served)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs text-ink-3 uppercase tracking-wide">Budget</dt>
+                      <dd className="text-sm font-medium text-ink num mt-0.5">
+                        {budget ? `$${k.declared_budget_usd.toFixed(2)}` : "Uncapped"}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {budget && (
+                    <div className="mt-3">
+                      <Meter value={pct} tone={pct >= 90 ? "danger" : pct >= 70 ? "warn" : "accent"} size="sm" />
+                      <p className="text-2xs text-ink-3 mt-1.5 num">{pct.toFixed(0)}% of declared budget delivered</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-5 mt-4 pt-3.5 border-t border-line flex-wrap">
+                    <label className="flex items-center gap-2 text-xs text-ink-2 cursor-pointer">
+                      <Switch
+                        checked={k.is_public}
+                        label="Public"
+                        onChange={(v) => update.mutate({ id: k.id, data: { is_public: v } })}
+                      />
+                      Public — share and earn
                     </label>
-                    <label className="flex items-center gap-1.5 text-warm-grey cursor-pointer">
-                      <input type="checkbox" checked={k.serve_owner_with_own_key}
-                        onChange={(e) => update.mutate({ id: k.id, data: { serve_owner_with_own_key: e.target.checked } })} />
+                    <label className="flex items-center gap-2 text-xs text-ink-2 cursor-pointer">
+                      <Switch
+                        checked={k.serve_owner_with_own_key}
+                        label="Serve my own requests"
+                        onChange={(v) => update.mutate({ id: k.id, data: { serve_owner_with_own_key: v } })}
+                      />
                       Serve my own requests
                     </label>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      {/* Deposit */}
+      <Modal
+        open={depositOpen}
+        onClose={() => setDepositOpen(false)}
+        title="Deposit a provider key"
+        description="The secret is encrypted at rest and never shown again, not even to you."
+        icon={<Plus size={17} />}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDepositOpen(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              disabled={!form.api_key.trim() || !consent}
+              loading={deposit.isPending}
+              onClick={() => deposit.mutate()}
+            >
+              Deposit key
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Provider" required>
+              <Select value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value })}>
+                {providers.length === 0 && <option value="openai">openai</option>}
+                {providers.map((p) => <option key={p} value={p}>{p}</option>)}
+              </Select>
+            </Field>
+            <Field label="Label" hint="How you will recognise it later.">
+              <Input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="My key" />
+            </Field>
+          </div>
+
+          <Field label="API key" required hint="Encrypted immediately. Never displayed again.">
+            <Input
+              type="password"
+              className="font-mono"
+              value={form.api_key}
+              onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+              placeholder="sk-…"
+              autoComplete="off"
+            />
+          </Field>
+
+          <Field label="Declared budget (USD)" hint="How much provider spend you are willing to contribute. 0 means uncapped.">
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              className="num"
+              value={form.declared_budget_usd}
+              onChange={(e) => setForm({ ...form, declared_budget_usd: parseFloat(e.target.value) || 0 })}
+            />
+          </Field>
+
+          <div className="rounded-xl border border-line bg-sunken p-4 space-y-3.5">
+            <Checkbox
+              checked={form.is_public}
+              onChange={(v) => setForm({ ...form, is_public: v })}
+              label="Public — share and earn"
+              hint="The router may use this key to serve other users. You earn 75% of the provider cost as credits."
+            />
+            <Checkbox
+              checked={form.serve_owner_with_own_key}
+              onChange={(v) => setForm({ ...form, serve_owner_with_own_key: v })}
+              label="Use my key for my own requests"
+              hint="Off means you are served like any other user while your key still serves the marketplace."
+            />
+          </div>
+
+          <Checkbox
+            checked={consent}
+            onChange={setConsent}
+            label="I understand and accept how this key will be used"
+            hint="A public key may serve other users, is never visible to them, and I remain responsible for my provider's terms of service."
+          />
         </div>
-      </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirming}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => confirming && revoke.mutate(confirming.id)}
+        title={`Revoke “${confirming?.label}”?`}
+        body="The key stops serving immediately and is removed from the routing pool. Credits you have already earned stay in your balance."
+        confirmLabel="Revoke key"
+        pending={revoke.isPending}
+      />
     </DashboardLayout>
   );
 }

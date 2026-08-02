@@ -31,6 +31,28 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
     <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500&display=swap" rel="stylesheet" />
+
+    <!--
+      Apply the stored theme before first paint. Without this the page renders in
+      the default theme and then flips once the bundle executes.
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("silk_theme");
+          var dark = saved === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+            : saved !== "light";
+          var root = document.documentElement;
+          root.classList.toggle("dark", dark);
+          root.dataset.theme = dark ? "dark" : "light";
+          root.style.colorScheme = dark ? "dark" : "light";
+          root.style.backgroundColor = dark ? "#0D0F10" : "#F6F5F2";
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", dark ? "#0D0F10" : "#F6F5F2");
+        } catch (e) { /* private mode: fall through to the CSS default */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

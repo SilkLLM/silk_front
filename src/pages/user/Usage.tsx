@@ -1,189 +1,231 @@
 /**
  * Usage.tsx
- * Usage logs page - shows per-request token counts, costs, models used.
+ * The activity log: every API call and balance movement, with the summary stats
+ * and spend shape above the table that produced them.
+ *
+ * Filters sit in one row above the content they filter. The chart is a single
+ * series so it carries no legend, and every value it plots is also present in
+ * the table below — colour is never the only way to read this page.
  */
 
 // File: silkllm-frontend/src/pages/user/Usage.tsx
 
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Filter } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart2, Coins, Download, Hash, Receipt, TrendingDown } from "lucide-react";
+import { AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { format } from "date-fns";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { usageApi } from "@/services/api";
-import { format } from "date-fns";
+import {
+  Badge, Button, EmptyState, PageHeader, Pagination, Panel, SegmentedControl,
+  Skeleton, StatTile, Toolbar,
+} from "@/components/ui";
+import { ChartTooltip, compact, usdPrecise, useChartTheme } from "@/lib/charts";
 
-const ENTRY_TYPES = [
-  { value: "", label: "All" },
-  { value: "usage", label: "API Calls" },
+const PAGE_SIZE = 20;
+
+type EntryType = "" | "usage" | "purchase" | "refund";
+
+const ENTRY_TYPES: { value: EntryType; label: string }[] = [
+  { value: "",         label: "All" },
+  { value: "usage",    label: "API calls" },
   { value: "purchase", label: "Purchases" },
-  { value: "refund", label: "Refunds" },
+  { value: "refund",   label: "Refunds" },
 ];
+
+const TONE: Record<string, "neutral" | "success" | "warning" | "brand"> = {
+  usage: "neutral", purchase: "success", refund: "warning", earning: "brand",
+};
+
+function totalTokens(entry: any): number | null {
+  if (entry.total_tokens) return entry.total_tokens;
+  if (entry.prompt_tokens !== undefined || entry.completion_tokens !== undefined) {
+    return (entry.prompt_tokens || 0) + (entry.completion_tokens || 0);
+  }
+  return null;
+}
+
+/** Download the visible page as CSV — the table view, portable. */
+function exportCsv(entries: any[]) {
+  const header = ["time", "type", "model", "prompt_tokens", "completion_tokens", "amount_usd", "balance_after_usd"];
+  const rows = entries.map((e) => [
+    new Date(e.created_at).toISOString(),
+    e.entry_type,
+    e.model || "",
+    e.prompt_tokens ?? "",
+    e.completion_tokens ?? "",
+    e.amount,
+    e.balance_after,
+  ]);
+  const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `silkllm-usage-${format(new Date(), "yyyy-MM-dd")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function Usage() {
   const [page, setPage] = useState(1);
-  const [entryType, setEntryType] = useState("");
+  const [entryType, setEntryType] = useState<EntryType>("");
+  const t = useChartTheme();
 
   const { data, isLoading } = useQuery({
     queryKey: ["usage-list", page, entryType],
-    queryFn: () => usageApi.list(page, 20, entryType || undefined).then((r) => r.data),
+    queryFn: () => usageApi.list(page, PAGE_SIZE, entryType || undefined).then((r) => r.data),
   });
 
-  const totalPages = data ? Math.ceil(data.total / 20) : 1;
+  const entries: any[] = data?.entries || [];
+  const totalPages = data?.total ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
 
-  // Analytics derived from the visible page (chronological for the chart).
-  const analytics = useMemo(() => {
-    const entries: any[] = data?.entries || [];
-    const spend = entries.filter((e) => e.amount < 0);
-    const spentTotal = spend.reduce((s, e) => s + Math.abs(e.amount), 0);
-    const tokensTotal = entries.reduce(
-      (s, e) => s + ((e.prompt_tokens || 0) + (e.completion_tokens || 0)), 0);
+  const summary = useMemo(() => {
+    const spent = entries.filter((e) => e.amount < 0).reduce((s, e) => s + Math.abs(e.amount), 0);
+    const added = entries.filter((e) => e.amount > 0).reduce((s, e) => s + e.amount, 0);
+    const tokens = entries.reduce((s, e) => s + (e.prompt_tokens || 0) + (e.completion_tokens || 0), 0);
+    // Chronological for the chart; the table stays newest-first.
     const chart = [...entries].reverse().map((e, i) => ({
       i: i + 1,
       cost: e.amount < 0 ? Math.abs(e.amount) : 0,
-      label: format(new Date(e.created_at), "MMM d HH:mm"),
+      label: format(new Date(e.created_at), "MMM d, HH:mm"),
     }));
-    return { spentTotal, tokensTotal, count: entries.length, chart };
-  }, [data]);
-
-  const getTotalTokens = (entry: any): number | null => {
-    if (entry.total_tokens) return entry.total_tokens;
-    if (entry.prompt_tokens !== undefined || entry.completion_tokens !== undefined) {
-      return (entry.prompt_tokens || 0) + (entry.completion_tokens || 0);
-    }
-    return null;
-  };
+    return { spent, added, tokens, chart };
+  }, [entries]);
 
   return (
     <DashboardLayout>
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey">Usage</h1>
-          <p className="text-warm-grey mt-1">Every API call and transaction in your account.</p>
-        </div>
+      <PageHeader
+        title="Usage"
+        subtitle="Every API call and balance movement on your account, newest first."
+        actions={
+          <Button
+            size="sm"
+            icon={<Download size={14} />}
+            disabled={!entries.length}
+            onClick={() => exportCsv(entries)}
+          >
+            Export CSV
+          </Button>
+        }
+      />
 
-        {/* Analytics */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="card">
-            <p className="text-xs text-warm-grey uppercase tracking-wide">Spent (this page)</p>
-            <p className="text-2xl font-bold text-silk-gold mt-1">${analytics.spentTotal.toFixed(4)}</p>
-          </div>
-          <div className="card">
-            <p className="text-xs text-warm-grey uppercase tracking-wide">Tokens</p>
-            <p className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey mt-1">{analytics.tokensTotal.toLocaleString()}</p>
-          </div>
-          <div className="card">
-            <p className="text-xs text-warm-grey uppercase tracking-wide">Records</p>
-            <p className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey mt-1">{analytics.count}</p>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatTile label="Spent on this page" value={usdPrecise(summary.spent)} icon={<TrendingDown size={14} />} accent />
+        <StatTile label="Credits added" value={usdPrecise(summary.added)} icon={<Coins size={14} />} />
+        <StatTile label="Tokens" value={compact(summary.tokens)} icon={<Hash size={14} />} />
+        <StatTile label="Records" value={compact(data?.total ?? entries.length)} icon={<Receipt size={14} />} hint="Matching the filter" />
+      </div>
 
-        {analytics.chart.length > 1 && (
-          <div className="card">
-            <p className="text-xs text-warm-grey uppercase tracking-wide mb-2">Spend over recent activity</p>
-            <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={analytics.chart}>
+      {summary.chart.length > 1 && (
+        <Panel title="Spend across this page" description="One point per record, oldest to newest." icon={<BarChart2 size={15} />}>
+          <div className="px-2 pb-4 pt-3">
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={summary.chart} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
                 <defs>
-                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#D29A2D" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#D29A2D" stopOpacity={0} />
+                  <linearGradient id="usageFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={t.seriesAt(0)} stopOpacity={0.18} />
+                    <stop offset="100%" stopColor={t.seriesAt(0)} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="i" tick={{ fontSize: 11, fill: "#C2C9CC" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#C2C9CC" }} width={48} />
+                <CartesianGrid {...t.gridProps} />
+                <XAxis dataKey="i" {...t.axisProps} minTickGap={20} />
+                <YAxis {...t.axisProps} width={64} tickFormatter={(v: number) => `$${v.toFixed(4)}`} />
                 <Tooltip
-                  formatter={(v: any) => `$${Number(v).toFixed(6)}`}
-                  labelFormatter={(l: any) => analytics.chart[l - 1]?.label || ""}
-                  contentStyle={{ background: "#383B3D", border: "none", borderRadius: 8, color: "#EDEFF0" }}
+                  cursor={{ stroke: t.axis, strokeWidth: 1 }}
+                  content={
+                    <ChartTooltip
+                      formatter={(v: any) => usdPrecise(Number(v))}
+                      labelFormatter={(l: any) => summary.chart[Number(l) - 1]?.label || ""}
+                    />
+                  }
                 />
-                <Area type="monotone" dataKey="cost" stroke="#D29A2D" strokeWidth={2} fill="url(#spendGrad)" />
+                <Area
+                  type="monotone"
+                  dataKey="cost"
+                  name="Cost"
+                  stroke={t.seriesAt(0)}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  fill="url(#usageFill)"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: t.surface }}
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        )}
+        </Panel>
+      )}
 
-        {/* Filters */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <Filter size={16} className="text-warm-grey" />
-          {ENTRY_TYPES.map((t) => (
-            <button key={t.value} onClick={() => { setEntryType(t.value); setPage(1); }}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-all min-h-[36px] ${
-                      entryType === t.value
-                        ? "bg-silk-gold text-white"
-                        : "bg-cloud-grey dark:bg-slate-dark text-warm-grey hover:text-cloud-grey"
-                    }`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Table */}
-        <div className="card p-0 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-cloud-grey dark:bg-deep-charcoal border-b border-muted-metal">
+      <Panel
+        title="Activity"
+        actions={
+          <Toolbar>
+            <SegmentedControl
+              size="sm"
+              value={entryType}
+              onChange={(v) => { setEntryType(v); setPage(1); }}
+              options={ENTRY_TYPES.map((e) => ({ value: e.value, label: e.label }))}
+            />
+          </Toolbar>
+        }
+        footer={
+          totalPages > 1 ? (
+            <Pagination page={page} totalPages={totalPages} total={data?.total} onPage={setPage} />
+          ) : undefined
+        }
+      >
+        {isLoading ? (
+          <div className="p-5 space-y-2.5">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-11" />)}
+          </div>
+        ) : !entries.length ? (
+          <EmptyState
+            icon={<Receipt size={19} />}
+            title="No records yet"
+            hint={entryType ? "Nothing matches this filter. Try “All”." : "Your API calls and purchases will show up here."}
+          />
+        ) : (
+          <div className="scroll-x">
+            <table className="table-shell">
+              <thead>
                 <tr>
-                  <th className="text-left px-4 py-3 text-warm-grey font-medium text-xs uppercase tracking-wider">Time</th>
-                  <th className="text-left px-4 py-3 text-warm-grey font-medium text-xs uppercase tracking-wider">Type</th>
-                  <th className="text-left px-4 py-3 text-warm-grey font-medium text-xs uppercase tracking-wider">Model</th>
-                  <th className="text-left px-4 py-3 text-warm-grey font-medium text-xs uppercase tracking-wider">Tokens</th>
-                  <th className="text-left px-4 py-3 text-warm-grey font-medium text-xs uppercase tracking-wider">Cost</th>
-                  <th className="text-left px-4 py-3 text-warm-grey font-medium text-xs uppercase tracking-wider">Balance After</th>
+                  <th>Time</th>
+                  <th>Type</th>
+                  <th>Model</th>
+                  <th className="text-right">Tokens</th>
+                  <th className="text-right">Amount</th>
+                  <th className="text-right">Balance after</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-cloud-grey dark:divide-muted-metal">
-                {isLoading ? (
-                  <tr><td colSpan={6} className="text-center py-8 text-warm-grey">Loading...</td></tr>
-                ) : !data?.entries?.length ? (
-                  <tr><td colSpan={6} className="text-center py-8 text-warm-grey">No records found.</td></tr>
-                ) : (
-                  data.entries.map((e: any) => {
-                    const totalTokens = getTotalTokens(e);
-                    return (
-                      <tr key={e.id} className="hover:bg-soft-cream dark:hover:bg-slate-dark transition-colors">
-                        <td className="px-4 py-3 text-warm-grey whitespace-nowrap">
-                          {format(new Date(e.created_at), "MMM d, HH:mm")}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`badge-${e.entry_type === "usage" ? "info" : e.entry_type === "purchase" ? "success" : "warning"}`}>
-                            {e.entry_type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-deep-charcoal dark:text-cloud-grey font-mono text-xs">
-                          {e.model || "-"}
-                        </td>
-                        <td className="px-4 py-3 text-warm-grey">
-                          {totalTokens !== null ? totalTokens.toLocaleString() : "-"}
-                        </td>
-                        <td className={`px-4 py-3 font-semibold ${e.amount < 0 ? "text-red-400" : "text-green-400"}`}>
-                          {e.amount > 0 ? "+" : ""}${Math.abs(e.amount).toFixed(6)}
-                        </td>
-                        <td className="px-4 py-3 text-warm-grey">${e.balance_after.toFixed(4)}</td>
-                      </tr>
-                    );
-                  })
-                )}
+              <tbody>
+                {entries.map((e) => {
+                  const tokens = totalTokens(e);
+                  const debit = e.amount < 0;
+                  return (
+                    <tr key={e.id}>
+                      <td className="text-ink-2 text-xs whitespace-nowrap num">
+                        {format(new Date(e.created_at), "MMM d, HH:mm")}
+                      </td>
+                      <td>
+                        <Badge tone={TONE[e.entry_type] || "neutral"}>{e.entry_type}</Badge>
+                      </td>
+                      <td className="font-mono text-xs text-ink-2 max-w-[220px] truncate">{e.model || "—"}</td>
+                      <td className="text-right num text-ink-2 text-xs">
+                        {tokens !== null ? tokens.toLocaleString() : "—"}
+                      </td>
+                      <td className={`text-right num text-xs font-medium ${debit ? "text-ink" : "text-success"}`}>
+                        {debit ? "−" : "+"}${Math.abs(e.amount).toFixed(6)}
+                      </td>
+                      <td className="text-right num text-ink-2 text-xs">${e.balance_after.toFixed(4)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-cloud-grey dark:border-muted-metal">
-              <p className="text-xs text-warm-grey">Page {page} of {totalPages} · {data?.total} records</p>
-              <div className="flex gap-2">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                        className="px-3 py-1.5 rounded text-sm text-warm-grey hover:text-cloud-grey disabled:opacity-40 min-h-[36px]">
-                  Previous
-                </button>
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                        className="px-3 py-1.5 rounded text-sm text-warm-grey hover:text-cloud-grey disabled:opacity-40 min-h-[36px]">
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+        )}
+      </Panel>
     </DashboardLayout>
   );
 }

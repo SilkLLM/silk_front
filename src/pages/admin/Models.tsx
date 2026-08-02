@@ -1,568 +1,497 @@
 /**
- * Models.tsx
- * Admin page - full CRUD for models: enable/disable, edit pricing, fallback chains, add new, delete.
+ * Models.tsx (admin)
+ * The model catalogue: pricing, routing weight, fallback chains and availability.
+ *
+ * The previous version rendered every editable field for every model inline,
+ * which made a hundred-model catalogue unreadable. Editing now happens in a
+ * dialog, so the list stays a scannable table and a change is an explicit,
+ * reviewable action rather than a stray keystroke.
  */
 
 // File: silkllm-frontend/src/pages/admin/Models.tsx
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ToggleLeft, ToggleRight, Save, Plus, Trash2, X, ChevronDown, ChevronRight, Search } from "lucide-react";
+import {
+  ChevronDown, Cpu, Pencil, Plus, Settings, Trash2, X,
+} from "lucide-react";
 import toast from "react-hot-toast";
+import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
+import {
+  Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Modal,
+  PageHeader, Panel, SearchInput, Select, Skeleton, StatTile, Switch, Toolbar,
+} from "@/components/ui";
+
+interface AdminModel {
+  id: string;
+  provider_id: string;
+  display_name: string;
+  enabled: boolean;
+  is_free?: boolean;
+  modality?: string;
+  input_cost_per_1k: number;
+  output_cost_per_1k: number;
+  routing_weight: number;
+  fallback_models?: string[];
+  capabilities?: string[];
+  context_window: number;
+}
+
+const BLANK = {
+  id: "", provider_id: "", display_name: "", enabled: true,
+  input_cost_per_1k: 0, output_cost_per_1k: 0, routing_weight: 1,
+  fallback_models: "", capabilities: "", context_window: 4096,
+};
+
+type Draft = typeof BLANK;
+
+const toDraft = (m: AdminModel): Draft => ({
+  id: m.id,
+  provider_id: m.provider_id,
+  display_name: m.display_name,
+  enabled: m.enabled,
+  input_cost_per_1k: m.input_cost_per_1k,
+  output_cost_per_1k: m.output_cost_per_1k,
+  routing_weight: m.routing_weight,
+  fallback_models: (m.fallback_models || []).join(", "),
+  capabilities: (m.capabilities || []).join(", "),
+  context_window: m.context_window,
+});
+
+const csv = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
+
+/** Shared field set for both the create and edit dialogs. */
+function ModelForm({ draft, setDraft, providerIds, isNew }: {
+  draft: Draft; setDraft: (d: Draft) => void; providerIds: string[]; isNew: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="Model ID" required hint={isNew ? "Exactly as the provider expects it in API calls." : "Immutable once created."}>
+          <Input
+            className="font-mono"
+            placeholder="gpt-4o-mini"
+            value={draft.id}
+            disabled={!isNew}
+            onChange={(e) => setDraft({ ...draft, id: e.target.value.trim() })}
+          />
+        </Field>
+        <Field label="Provider" required>
+          <Select
+            value={draft.provider_id}
+            disabled={!isNew}
+            onChange={(e) => setDraft({ ...draft, provider_id: e.target.value })}
+          >
+            <option value="">Select a provider</option>
+            {providerIds.map((p) => <option key={p} value={p}>{p}</option>)}
+          </Select>
+        </Field>
+      </div>
+
+      <Field label="Display name" required hint="What users see in the model picker.">
+        <Input
+          placeholder="GPT-4o Mini"
+          value={draft.display_name}
+          onChange={(e) => setDraft({ ...draft, display_name: e.target.value })}
+        />
+      </Field>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="Input cost ($ / 1K tokens)">
+          <Input
+            type="number" step="0.000001" min="0" className="num"
+            value={draft.input_cost_per_1k}
+            onChange={(e) => setDraft({ ...draft, input_cost_per_1k: parseFloat(e.target.value) || 0 })}
+          />
+        </Field>
+        <Field label="Output cost ($ / 1K tokens)">
+          <Input
+            type="number" step="0.000001" min="0" className="num"
+            value={draft.output_cost_per_1k}
+            onChange={(e) => setDraft({ ...draft, output_cost_per_1k: parseFloat(e.target.value) || 0 })}
+          />
+        </Field>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="Routing weight" hint="Higher wins when a provider is chosen without a model.">
+          <Input
+            type="number" min="0" max="100" className="num"
+            value={draft.routing_weight}
+            onChange={(e) => setDraft({ ...draft, routing_weight: parseInt(e.target.value) || 0 })}
+          />
+        </Field>
+        <Field label="Context window (tokens)">
+          <Input
+            type="number" min="1" className="num"
+            value={draft.context_window}
+            onChange={(e) => setDraft({ ...draft, context_window: parseInt(e.target.value) || 0 })}
+          />
+        </Field>
+      </div>
+
+      <Field label="Fallback models" hint="Comma-separated model IDs, tried in order when this one fails.">
+        <Input
+          className="font-mono text-xs"
+          placeholder="gpt-3.5-turbo, claude-3-haiku"
+          value={draft.fallback_models}
+          onChange={(e) => setDraft({ ...draft, fallback_models: e.target.value })}
+        />
+      </Field>
+
+      <Field label="Capabilities" hint="Comma-separated, e.g. chat, function-calling, vision.">
+        <Input
+          className="font-mono text-xs"
+          placeholder="chat, vision"
+          value={draft.capabilities}
+          onChange={(e) => setDraft({ ...draft, capabilities: e.target.value })}
+        />
+      </Field>
+
+      <div className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-4 py-3">
+        <Switch checked={draft.enabled} label="Enabled" onChange={(v) => setDraft({ ...draft, enabled: v })} />
+        <div>
+          <p className="text-sm text-ink">Available to users</p>
+          <p className="text-xs text-ink-3">Disabled models are hidden from routing and the picker.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminModels() {
   const qc = useQueryClient();
-  const [editing, setEditing] = useState<Record<string, any>>({});
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newModel, setNewModel] = useState({
-    id: "",
-    provider_id: "",
-    display_name: "",
-    enabled: true,
-    input_cost_per_1k: 0,
-    output_cost_per_1k: 0,
-    routing_weight: 1,
-    fallback_models: "",
-    capabilities: "",
-    context_window: 4096,
-  });
+  const [addOpen, setAddOpen] = useState(false);
+  const [draft, setDraft] = useState<Draft>(BLANK);
+  const [editing, setEditing] = useState<AdminModel | null>(null);
+  const [editDraft, setEditDraft] = useState<Draft>(BLANK);
+  const [confirming, setConfirming] = useState<AdminModel | null>(null);
 
-  // Filters and per-provider collapse state
   const [search, setSearch] = useState("");
-  const [providerFilter, setProviderFilter] = useState("all");
-  const [modalityFilter, setModalityFilter] = useState("all");
-  const [tierFilter, setTierFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [provider, setProvider] = useState("all");
+  const [modality, setModality] = useState("all");
+  const [tier, setTier] = useState("all");
+  const [status, setStatus] = useState("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const { data: models, isLoading } = useQuery({
+  const { data: models, isLoading } = useQuery<AdminModel[]>({
     queryKey: ["admin-models"],
     queryFn: () => adminApi.models.list().then((r) => r.data),
   });
 
-  const updateMutation = useMutation({
+  const update = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => adminApi.models.update(id, data),
-    onSuccess: () => { toast.success("Model updated"); qc.invalidateQueries({ queryKey: ["admin-models"] }); },
-    onError: () => toast.error("Update failed"),
+    onSuccess: () => { toast.success("Model updated."); qc.invalidateQueries({ queryKey: ["admin-models"] }); },
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Update failed."),
   });
 
-  const createMutation = useMutation({
+  const create = useMutation({
     mutationFn: (data: any) => adminApi.models.create(data),
     onSuccess: () => {
-      toast.success("Model created");
+      toast.success("Model created.");
       qc.invalidateQueries({ queryKey: ["admin-models"] });
-      setShowAddForm(false);
-      setNewModel({
-        id: "", provider_id: "", display_name: "", enabled: true,
-        input_cost_per_1k: 0, output_cost_per_1k: 0, routing_weight: 1,
-        fallback_models: "", capabilities: "", context_window: 4096,
-      });
+      setAddOpen(false);
+      setDraft(BLANK);
     },
-    onError: (err: any) => toast.error(err.response?.data?.detail || "Creation failed"),
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Could not create the model."),
   });
 
-  const deleteMutation = useMutation({
+  const remove = useMutation({
     mutationFn: (id: string) => adminApi.models.delete(id),
-    onSuccess: () => {
-      toast.success("Model deleted");
-      qc.invalidateQueries({ queryKey: ["admin-models"] });
-    },
-    onError: (err: any) => toast.error(err.response?.data?.detail || "Deletion failed"),
+    onSuccess: () => { toast.success("Model deleted."); qc.invalidateQueries({ queryKey: ["admin-models"] }); },
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Could not delete the model."),
   });
 
-  const toggleModel = (id: string, current: boolean) =>
-    updateMutation.mutate({ id, data: { enabled: !current } });
+  const all = models || [];
+  const providerIds = useMemo(
+    () => Array.from(new Set(all.map((m) => String(m.provider_id)))).sort(),
+    [all],
+  );
 
-  const saveEdits = (id: string) => {
-    if (!editing[id]) return;
-    updateMutation.mutate({ id, data: editing[id] });
-    setEditing(e => { const n = { ...e }; delete n[id]; return n; });
-  };
-
-  const setEdit = (id: string, field: string, value: any) =>
-    setEditing(e => ({ ...e, [id]: { ...(e[id] || {}), [field]: value } }));
-
-  const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`Delete model "${name}"? This action cannot be undone.`)) {
-      deleteMutation.mutate(id);
-    }
-  };
-
-  // Full provider list (unfiltered) used for the add-model dropdown and the filter select
-  const providerIds: string[] = Array.from(
-    new Set(((models as any[]) || []).map((m: any) => String(m.provider_id)))
-  ).sort();
-
-  // Apply the active filters before grouping
   const q = search.trim().toLowerCase();
-  const filtersActive =
-    !!q || providerFilter !== "all" || modalityFilter !== "all" || tierFilter !== "all" || statusFilter !== "all";
-  const filtered = (models || []).filter((m: any) => {
-    if (providerFilter !== "all" && m.provider_id !== providerFilter) return false;
-    const mod = m.modality || "text";
-    if (modalityFilter !== "all" && mod !== modalityFilter) return false;
-    if (tierFilter === "free" && !m.is_free) return false;
-    if (tierFilter === "paid" && m.is_free) return false;
-    if (statusFilter === "enabled" && !m.enabled) return false;
-    if (statusFilter === "disabled" && m.enabled) return false;
+  const filtersActive = !!q || provider !== "all" || modality !== "all" || tier !== "all" || status !== "all";
+
+  const filtered = useMemo(() => all.filter((m) => {
+    if (provider !== "all" && m.provider_id !== provider) return false;
+    if (modality !== "all" && (m.modality || "text") !== modality) return false;
+    if (tier === "free" && !m.is_free) return false;
+    if (tier === "paid" && m.is_free) return false;
+    if (status === "enabled" && !m.enabled) return false;
+    if (status === "disabled" && m.enabled) return false;
     if (q && !`${m.display_name} ${m.id}`.toLowerCase().includes(q)) return false;
     return true;
-  });
+  }), [all, provider, modality, tier, status, q]);
 
-  // Group filtered models by provider
-  const grouped = filtered.reduce((acc: any, m: any) => {
-    if (!acc[m.provider_id]) acc[m.provider_id] = [];
-    acc[m.provider_id].push(m);
-    return acc;
-  }, {} as Record<string, any[]>);
+  const grouped = useMemo(() => {
+    const map: Record<string, AdminModel[]> = {};
+    for (const m of filtered) (map[m.provider_id] ||= []).push(m);
+    for (const k of Object.keys(map)) map[k].sort((a, b) => a.display_name.localeCompare(b.display_name));
+    return map;
+  }, [filtered]);
+
   const groupKeys = Object.keys(grouped).sort();
 
+  const openEdit = (m: AdminModel) => { setEditing(m); setEditDraft(toDraft(m)); };
+
   const clearFilters = () => {
-    setSearch(""); setProviderFilter("all"); setModalityFilter("all"); setTierFilter("all"); setStatusFilter("all");
+    setSearch(""); setProvider("all"); setModality("all"); setTier("all"); setStatus("all");
   };
 
   return (
     <DashboardLayout>
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey">Model Control</h1>
-            <p className="text-warm-grey mt-1">Full CRUD: create, update, delete models. Configure pricing, fallbacks, and routing.</p>
-            {models && (
-              <div className="flex flex-wrap gap-2 mt-3 text-xs">
-                <span className="badge-info">{models.length} models</span>
-                <span className="badge-success">{models.filter((m: any) => m.is_free).length} free</span>
-                <span className="badge-info">{models.filter((m: any) => (m.modality || "text") !== "text").length} image/audio/video</span>
-                <span className="badge-info">{new Set(models.map((m: any) => m.provider_id)).size} providers</span>
-              </div>
-            )}
+      <PageHeader
+        title="Model Control"
+        subtitle="Pricing, routing weight and fallback chains for every model the gateway can reach."
+        actions={
+          <Button variant="primary" icon={<Plus size={15} />} onClick={() => { setDraft(BLANK); setAddOpen(true); }}>
+            Add model
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatTile label="Models" value={all.length} icon={<Cpu size={14} />} hint={`${all.filter((m) => m.enabled).length} enabled`} />
+        <StatTile label="Providers" value={providerIds.length} icon={<Settings size={14} />} />
+        <StatTile label="Free models" value={all.filter((m) => m.is_free).length} icon={<Cpu size={14} />} hint="No cost to serve" />
+        <StatTile label="Multimodal" value={all.filter((m) => (m.modality || "text") !== "text").length} icon={<Cpu size={14} />} hint="Image, audio, video" />
+      </div>
+
+      {/* Filters — one row above the content they filter. */}
+      <Panel>
+        <div className="px-5 sm:px-6 py-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="lg:col-span-2">
+              <SearchInput value={search} onChange={setSearch} placeholder="Search by name or model ID" />
+            </div>
+            <Select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label="Provider">
+              <option value="all">All providers</option>
+              {providerIds.map((p) => <option key={p} value={p}>{p}</option>)}
+            </Select>
+            <Select value={modality} onChange={(e) => setModality(e.target.value)} aria-label="Modality">
+              <option value="all">All modalities</option>
+              <option value="text">Text</option>
+              <option value="image">Image</option>
+              <option value="audio">Audio</option>
+              <option value="video">Video</option>
+            </Select>
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+              <option value="all">All statuses</option>
+              <option value="enabled">Enabled</option>
+              <option value="disabled">Disabled</option>
+            </Select>
           </div>
-          <button onClick={() => setShowAddForm(true)} className="btn-primary flex items-center gap-2">
-            <Plus size={16} /> Add Model
-          </button>
-        </div>
 
-        {/* Add model form - improved with clear labels */}
-        {showAddForm && (
-          <div className="card border-silk-gold/30">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-deep-charcoal dark:text-cloud-grey">Create New Model</h3>
-              <button onClick={() => setShowAddForm(false)} className="text-warm-grey hover:text-silk-gold">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Model ID */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Model ID <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., gpt-4o-mini"
-                  value={newModel.id}
-                  onChange={(e) => setNewModel({ ...newModel, id: e.target.value.trim() })}
-                  className="input"
-                />
-                <p className="text-xs text-warm-grey mt-1">Unique identifier used in API requests.</p>
-              </div>
-
-              {/* Provider */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Provider <span className="text-red-400">*</span>
-                </label>
-                <select
-                  value={newModel.provider_id}
-                  onChange={(e) => setNewModel({ ...newModel, provider_id: e.target.value })}
-                  className="input"
-                >
-                  <option value="">Select a provider</option>
-                  {providerIds.map(pid => (
-                    <option key={pid} value={pid}>{pid}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-warm-grey mt-1">Parent provider (must exist).</p>
-              </div>
-
-              {/* Display Name */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Display Name <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., GPT-4o Mini"
-                  value={newModel.display_name}
-                  onChange={(e) => setNewModel({ ...newModel, display_name: e.target.value })}
-                  className="input"
-                />
-                <p className="text-xs text-warm-grey mt-1">Human-friendly name shown to users.</p>
-              </div>
-
-              {/* Enabled toggle */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Status
-                </label>
-                <div className="flex items-center gap-3 mt-1">
-                  <button
-                    onClick={() => setNewModel({ ...newModel, enabled: !newModel.enabled })}
-                    className="flex items-center gap-2 text-warm-grey hover:text-silk-gold transition-colors"
-                  >
-                    {newModel.enabled ? (
-                      <ToggleRight size={26} className="text-silk-gold" />
-                    ) : (
-                      <ToggleLeft size={26} />
-                    )}
-                    <span>{newModel.enabled ? "Active" : "Disabled"}</span>
-                  </button>
-                </div>
-                <p className="text-xs text-warm-grey mt-1">If disabled, users cannot use this model.</p>
-              </div>
-
-              {/* Input Cost */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Input Cost ($ / 1K tokens)
-                </label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  min="0"
-                  value={newModel.input_cost_per_1k}
-                  onChange={(e) => setNewModel({ ...newModel, input_cost_per_1k: parseFloat(e.target.value) })}
-                  className="input"
-                />
-              </div>
-
-              {/* Output Cost */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Output Cost ($ / 1K tokens)
-                </label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  min="0"
-                  value={newModel.output_cost_per_1k}
-                  onChange={(e) => setNewModel({ ...newModel, output_cost_per_1k: parseFloat(e.target.value) })}
-                  className="input"
-                />
-              </div>
-
-              {/* Routing Weight */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Routing Weight (0-100)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={newModel.routing_weight}
-                  onChange={(e) => setNewModel({ ...newModel, routing_weight: parseInt(e.target.value) })}
-                  className="input"
-                />
-                <p className="text-xs text-warm-grey mt-1">Higher weight = more traffic (auto-routing).</p>
-              </div>
-
-              {/* Context Window */}
-              <div>
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Context Window (tokens)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={newModel.context_window}
-                  onChange={(e) => setNewModel({ ...newModel, context_window: parseInt(e.target.value) })}
-                  className="input"
-                />
-              </div>
-
-              {/* Fallback Models */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Fallback Models (comma-separated IDs)
-                </label>
-                <input
-                  type="text"
-                  placeholder="gpt-3.5-turbo,claude-3-haiku"
-                  value={newModel.fallback_models}
-                  onChange={(e) => setNewModel({ ...newModel, fallback_models: e.target.value })}
-                  className="input"
-                />
-                <p className="text-xs text-warm-grey mt-1">If this model fails, SilkLLM will try these in order.</p>
-              </div>
-
-              {/* Capabilities */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-deep-charcoal dark:text-cloud-grey mb-1">
-                  Capabilities (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  placeholder="chat,function-calling,vision"
-                  value={newModel.capabilities}
-                  onChange={(e) => setNewModel({ ...newModel, capabilities: e.target.value })}
-                  className="input"
-                />
-                <p className="text-xs text-warm-grey mt-1">E.g., chat, function-calling, vision, embedding.</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => setShowAddForm(false)} className="btn-secondary text-sm px-4 py-2">
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (!newModel.id || !newModel.provider_id || !newModel.display_name) {
-                    toast.error("Model ID, Provider, and Display Name are required");
-                    return;
-                  }
-                  createMutation.mutate({
-                    ...newModel,
-                    fallback_models: newModel.fallback_models.split(",").map(s => s.trim()).filter(Boolean),
-                    capabilities: newModel.capabilities.split(",").map(s => s.trim()).filter(Boolean),
-                  });
-                }}
-                className="btn-primary text-sm px-4 py-2 flex items-center gap-1"
-              >
-                <Plus size={14} /> Create Model
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Filter bar */}
-        {models && models.length > 0 && (
-          <div className="card">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <div className="lg:col-span-2">
-                <label className="text-xs text-warm-grey">Search</label>
-                <div className="relative mt-1">
-                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-grey pointer-events-none" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by name or model id"
-                    className="input pl-9"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-warm-grey">Provider</label>
-                <select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)} className="input mt-1">
-                  <option value="all">All providers</option>
-                  {providerIds.map((pid) => <option key={pid} value={pid}>{pid}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-warm-grey">Modality</label>
-                <select value={modalityFilter} onChange={(e) => setModalityFilter(e.target.value)} className="input mt-1">
-                  <option value="all">All modalities</option>
-                  <option value="text">Text</option>
-                  <option value="image">Image</option>
-                  <option value="audio">Audio</option>
-                  <option value="video">Video</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-warm-grey">Tier</label>
-                <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} className="input mt-1">
-                  <option value="all">All tiers</option>
-                  <option value="free">Free</option>
-                  <option value="paid">Paid</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-warm-grey">Status</label>
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input mt-1">
-                  <option value="all">All statuses</option>
-                  <option value="enabled">Enabled</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex items-center justify-between flex-wrap gap-2 mt-3">
-              <span className="text-xs text-warm-grey">
-                Showing {filtered.length} of {models.length} models
-                {filtersActive && (
-                  <button onClick={clearFilters} className="ml-2 text-silk-gold hover:underline">Clear filters</button>
-                )}
+          <Toolbar className="justify-between">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Select value={tier} onChange={(e) => setTier(e.target.value)} className="h-8 text-xs w-auto" aria-label="Tier">
+                <option value="all">All tiers</option>
+                <option value="free">Free</option>
+                <option value="paid">Paid</option>
+              </Select>
+              <span className="text-xs text-ink-3 num">
+                Showing {filtered.length} of {all.length}
               </span>
-              <div className="flex gap-4 text-xs">
-                <button onClick={() => setCollapsed({})} className="text-silk-gold hover:underline">Expand all</button>
-                <button
-                  onClick={() => setCollapsed(Object.fromEntries(groupKeys.map((k) => [k, true])))}
-                  className="text-silk-gold hover:underline"
-                >
-                  Collapse all
+              {filtersActive && (
+                <button onClick={clearFilters} className="text-xs text-accent-ink hover:underline inline-flex items-center gap-1">
+                  <X size={12} /> Clear filters
                 </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="text-warm-grey">Loading models...</div>
-        ) : groupKeys.length === 0 ? (
-          <div className="card text-center text-warm-grey py-10">
-            {models && models.length > 0 ? "No models match the current filters." : "No models yet."}
-          </div>
-        ) : (
-          groupKeys.map((providerId) => {
-            const provModels = grouped[providerId];
-            const isCollapsed = !!collapsed[providerId];
-            const freeCount = provModels.filter((m: any) => m.is_free).length;
-            return (
-            <div key={providerId} className="card p-0 overflow-hidden">
-              <button
-                onClick={() => setCollapsed((c) => ({ ...c, [providerId]: !c[providerId] }))}
-                className="w-full px-5 py-3 bg-cloud-grey dark:bg-deep-charcoal border-b border-muted-metal flex justify-between items-center text-left hover:bg-muted-metal/40 transition-colors"
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  {isCollapsed ? <ChevronRight size={18} className="text-warm-grey" /> : <ChevronDown size={18} className="text-warm-grey" />}
-                  <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey capitalize">{providerId}</h2>
-                  <span className="badge-info">{provModels.length}</span>
-                  {freeCount > 0 && <span className="badge-success">{freeCount} free</span>}
-                </div>
-              </button>
-              {!isCollapsed && (
-              <div className="divide-y divide-cloud-grey dark:divide-muted-metal">
-                {provModels.map((m: any) => {
-                  const hasEdits = !!editing[m.id];
-                  return (
-                    <div key={m.id} className={`p-4 ${!m.enabled ? "opacity-60" : ""}`}>
-                      <div className="flex items-start gap-3 flex-wrap">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-deep-charcoal dark:text-cloud-grey text-sm">{m.display_name}</span>
-                            <span className="font-mono text-xs text-warm-grey">{m.id}</span>
-                            {m.is_free && <span className="badge-success">Free</span>}
-                            {m.modality && m.modality !== "text" && <span className="badge-info">{m.modality}</span>}
-                            {!m.enabled && <span className="badge-error">Disabled</span>}
-                          </div>
-
-                          {/* Editable fields */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-                            <div>
-                              <label className="text-xs text-warm-grey">Input $/1K</label>
-                              <input
-                                type="number"
-                                step="0.000001"
-                                defaultValue={m.input_cost_per_1k}
-                                onChange={(e) => setEdit(m.id, "input_cost_per_1k", parseFloat(e.target.value))}
-                                className="input text-xs py-1.5 mt-1"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs text-warm-grey">Output $/1K</label>
-                              <input
-                                type="number"
-                                step="0.000001"
-                                defaultValue={m.output_cost_per_1k}
-                                onChange={(e) => setEdit(m.id, "output_cost_per_1k", parseFloat(e.target.value))}
-                                className="input text-xs py-1.5 mt-1"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs text-warm-grey">Routing Weight</label>
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                defaultValue={m.routing_weight}
-                                onChange={(e) => setEdit(m.id, "routing_weight", parseInt(e.target.value))}
-                                className="input text-xs py-1.5 mt-1"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs text-warm-grey">Fallbacks (comma-sep)</label>
-                              <input
-                                type="text"
-                                defaultValue={(m.fallback_models || []).join(",")}
-                                onChange={(e) =>
-                                  setEdit(
-                                    m.id,
-                                    "fallback_models",
-                                    e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean)
-                                  )
-                                }
-                                className="input text-xs py-1.5 mt-1"
-                                placeholder="model-id-1,model-id-2"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs text-warm-grey">Context Window</label>
-                              <input
-                                type="number"
-                                defaultValue={m.context_window}
-                                onChange={(e) => setEdit(m.id, "context_window", parseInt(e.target.value))}
-                                className="input text-xs py-1.5 mt-1"
-                              />
-                            </div>
-                            <div className="sm:col-span-2">
-                              <label className="text-xs text-warm-grey">Capabilities (comma)</label>
-                              <input
-                                type="text"
-                                defaultValue={(m.capabilities || []).join(",")}
-                                onChange={(e) =>
-                                  setEdit(
-                                    m.id,
-                                    "capabilities",
-                                    e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean)
-                                  )
-                                }
-                                className="input text-xs py-1.5 mt-1"
-                              />
-                            </div>
-                          </div>
-
-                          {hasEdits && (
-                            <button
-                              onClick={() => saveEdits(m.id)}
-                              className="mt-2 text-xs btn-primary py-1.5 px-3 flex items-center gap-1"
-                            >
-                              <Save size={12} /> Save changes
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => toggleModel(m.id, m.enabled)}
-                            className="text-warm-grey hover:text-silk-gold transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          >
-                            {m.enabled ? (
-                              <ToggleRight size={26} className="text-silk-gold" />
-                            ) : (
-                              <ToggleLeft size={26} />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(m.id, m.display_name)}
-                            className="text-warm-grey hover:text-red-400 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
               )}
             </div>
+            <div className="flex gap-3 text-xs">
+              <button onClick={() => setCollapsed({})} className="text-accent-ink hover:underline">Expand all</button>
+              <button
+                onClick={() => setCollapsed(Object.fromEntries(groupKeys.map((k) => [k, true])))}
+                className="text-accent-ink hover:underline"
+              >
+                Collapse all
+              </button>
+            </div>
+          </Toolbar>
+        </div>
+      </Panel>
+
+      {isLoading ? (
+        <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40" />)}</div>
+      ) : !groupKeys.length ? (
+        <Panel>
+          <EmptyState
+            icon={<Cpu size={19} />}
+            title={all.length ? "No models match these filters" : "No models configured"}
+            hint={all.length ? "Try widening the search or clearing the filters." : "Add a model to make it routable."}
+            action={all.length
+              ? <Button size="sm" onClick={clearFilters}>Clear filters</Button>
+              : <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={() => setAddOpen(true)}>Add model</Button>}
+          />
+        </Panel>
+      ) : (
+        <div className="space-y-4">
+          {groupKeys.map((pid) => {
+            const list = grouped[pid];
+            const isCollapsed = !!collapsed[pid];
+            const free = list.filter((m) => m.is_free).length;
+
+            return (
+              <section key={pid} className="card overflow-hidden">
+                <button
+                  onClick={() => setCollapsed((c) => ({ ...c, [pid]: !c[pid] }))}
+                  aria-expanded={!isCollapsed}
+                  className="w-full flex items-center gap-3 px-5 sm:px-6 py-3.5 text-left hover:bg-sunken transition-colors border-b border-line"
+                >
+                  <ChevronDown size={16} className={clsx("text-ink-3 shrink-0 transition-transform", isCollapsed && "-rotate-90")} />
+                  <span className="text-sm font-semibold text-ink capitalize">{pid}</span>
+                  <Badge tone="neutral">{list.length}</Badge>
+                  {free > 0 && <Badge tone="success">{free} free</Badge>}
+                  <span className="ml-auto text-xs text-ink-3 num">
+                    {list.filter((m) => m.enabled).length} enabled
+                  </span>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="scroll-x">
+                    <table className="table-shell">
+                      <thead>
+                        <tr>
+                          <th>Model</th>
+                          <th className="text-right">Input / 1K</th>
+                          <th className="text-right">Output / 1K</th>
+                          <th className="text-right">Weight</th>
+                          <th className="text-right">Context</th>
+                          <th>Fallbacks</th>
+                          <th className="text-right">Enabled</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {list.map((m) => (
+                          <tr key={m.id} className={clsx(!m.enabled && "opacity-60")}>
+                            <td>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm text-ink font-medium">{m.display_name}</span>
+                                {m.is_free && <Badge tone="success">Free</Badge>}
+                                {m.modality && m.modality !== "text" && <Badge tone="neutral">{m.modality}</Badge>}
+                              </div>
+                              <p className="text-2xs font-mono text-ink-3 mt-0.5 truncate max-w-[220px]">{m.id}</p>
+                            </td>
+                            <td className="text-right num text-xs text-ink-2">${m.input_cost_per_1k.toFixed(6)}</td>
+                            <td className="text-right num text-xs text-ink-2">${m.output_cost_per_1k.toFixed(6)}</td>
+                            <td className="text-right num text-xs text-ink-2">{m.routing_weight}</td>
+                            <td className="text-right num text-xs text-ink-2">
+                              {m.context_window ? m.context_window.toLocaleString() : "—"}
+                            </td>
+                            <td className="text-xs text-ink-3 font-mono max-w-[180px] truncate">
+                              {(m.fallback_models || []).join(", ") || "—"}
+                            </td>
+                            <td>
+                              <div className="flex justify-end">
+                                <Switch
+                                  checked={m.enabled}
+                                  label={m.enabled ? `Disable ${m.display_name}` : `Enable ${m.display_name}`}
+                                  onChange={() => update.mutate({ id: m.id, data: { enabled: !m.enabled } })}
+                                />
+                              </div>
+                            </td>
+                            <td>
+                              <div className="flex items-center justify-end gap-0.5">
+                                <IconButton label={`Edit ${m.display_name}`} size={32} onClick={() => openEdit(m)}>
+                                  <Pencil size={14} />
+                                </IconButton>
+                                <IconButton label={`Delete ${m.display_name}`} size={32} tone="danger" onClick={() => setConfirming(m)}>
+                                  <Trash2 size={14} />
+                                </IconButton>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
+
+      {/* Create */}
+      <Modal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        title="Add a model"
+        description="The ID must match what the provider expects — the router passes it through verbatim."
+        icon={<Plus size={17} />}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={create.isPending}
+              disabled={!draft.id || !draft.provider_id || !draft.display_name}
+              onClick={() => create.mutate({
+                ...draft,
+                fallback_models: csv(draft.fallback_models),
+                capabilities: csv(draft.capabilities),
+              })}
+            >
+              Create model
+            </Button>
+          </>
+        }
+      >
+        <ModelForm draft={draft} setDraft={setDraft} providerIds={providerIds} isNew />
+      </Modal>
+
+      {/* Edit */}
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title={`Edit ${editing?.display_name || "model"}`}
+        description="Changes take effect on the next request routed to this model."
+        icon={<Pencil size={17} />}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={update.isPending}
+              onClick={() => {
+                if (!editing) return;
+                update.mutate({
+                  id: editing.id,
+                  data: {
+                    display_name: editDraft.display_name,
+                    enabled: editDraft.enabled,
+                    input_cost_per_1k: editDraft.input_cost_per_1k,
+                    output_cost_per_1k: editDraft.output_cost_per_1k,
+                    routing_weight: editDraft.routing_weight,
+                    context_window: editDraft.context_window,
+                    fallback_models: csv(editDraft.fallback_models),
+                    capabilities: csv(editDraft.capabilities),
+                  },
+                });
+                setEditing(null);
+              }}
+            >
+              Save changes
+            </Button>
+          </>
+        }
+      >
+        <ModelForm draft={editDraft} setDraft={setEditDraft} providerIds={providerIds} isNew={false} />
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirming}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => confirming && remove.mutate(confirming.id)}
+        title={`Delete “${confirming?.display_name}”?`}
+        body="Requests naming this model will fail, and any fallback chain pointing at it will skip it. This cannot be undone."
+        confirmLabel="Delete model"
+        pending={remove.isPending}
+      />
     </DashboardLayout>
   );
 }

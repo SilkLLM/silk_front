@@ -1,82 +1,133 @@
 /**
  * Settings.tsx (admin)
- * Live-editable platform settings: the free-trial daily limit and duration, and
- * the reward/markup percentages. Changes take effect within seconds, no redeploy.
+ * Live platform settings — trial limits, markup and reward percentages — plus
+ * the emergency kill switches.
+ *
+ * A setting is only saved when it is explicitly submitted, and a dirty row says
+ * so, because these values move real money within seconds of being changed.
  */
 
 // File: silkllm-frontend/src/pages/admin/Settings.tsx
 
 import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { SlidersHorizontal, Save, ShieldAlert } from "lucide-react";
+import { RotateCcw, Save, ShieldAlert, SlidersHorizontal } from "lucide-react";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
+import {
+  Badge, Button, Callout, EmptyState, Input, PageHeader, Panel, Skeleton, Switch,
+} from "@/components/ui";
 
-interface Setting { key: string; label: string; type: string; value: number; }
-interface Flag { key: string; label: string; enabled: boolean; }
+interface Setting { key: string; label: string; type: string; value: number }
+interface Flag { key: string; label: string; enabled: boolean }
 
-function KillSwitches() {
-  const qc = useQueryClient();
-  const { data } = useQuery<Flag[]>({
-    queryKey: ["killswitches"],
-    queryFn: () => adminApi.killswitch.list().then((r) => r.data),
-  });
-  const set = useMutation({
-    mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) => adminApi.killswitch.set(key, enabled),
-    onSuccess: () => { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["killswitches"] }); },
-    onError: () => toast.error("Failed"),
-  });
+function SettingRow({ s, onSave, saving }: {
+  s: Setting; onSave: (key: string, value: number) => void; saving: boolean;
+}) {
+  const [value, setValue] = useState(String(s.value));
+  useEffect(() => { setValue(String(s.value)); }, [s.value]);
+
+  const parsed = parseFloat(value);
+  const dirty = !Number.isNaN(parsed) && parsed !== s.value;
+  const invalid = value !== "" && Number.isNaN(parsed);
+
   return (
-    <div className="card border-red-500/20">
-      <h2 className="font-semibold text-deep-charcoal dark:text-cloud-grey mb-1 flex items-center gap-2">
-        <ShieldAlert size={18} className="text-red-400" /> Emergency switches
-      </h2>
-      <p className="text-xs text-warm-grey mb-4">Flip to contain an incident. Takes effect within seconds.</p>
-      <div className="space-y-2">
-        {(data || []).map((f) => (
-          <div key={f.key} className="flex items-center justify-between py-2 border-b border-muted-metal/20 last:border-0">
-            <div>
-              <p className="text-sm text-deep-charcoal dark:text-cloud-grey">{f.label}</p>
-              <p className="text-xs font-mono text-warm-grey">{f.key}</p>
-            </div>
-            <button
-              onClick={() => set.mutate({ key: f.key, enabled: !f.enabled })}
-              className={`relative w-12 h-6 rounded-full transition-colors ${f.enabled ? "bg-red-500" : "bg-muted-metal"}`}
-              title={f.enabled ? "On" : "Off"}
-            >
-              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${f.enabled ? "translate-x-6" : "translate-x-0.5"}`} />
-            </button>
-          </div>
-        ))}
+    <div className="flex items-center gap-3 px-5 sm:px-6 py-4 flex-wrap">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-ink flex items-center gap-2">
+          {s.label}
+          {dirty && <Badge tone="warning">Unsaved</Badge>}
+        </p>
+        <p className="text-2xs font-mono text-ink-3 mt-0.5">{s.key}</p>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        <Input
+          type="number"
+          step={s.type === "int" ? 1 : 0.01}
+          min={0}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && dirty) onSave(s.key, parsed); }}
+          className="w-28 text-right num"
+          aria-label={s.label}
+        />
+        {dirty && (
+          <Button size="sm" variant="ghost" icon={<RotateCcw size={13} />} onClick={() => setValue(String(s.value))} aria-label="Reset" />
+        )}
+        <Button
+          size="sm"
+          variant="primary"
+          icon={<Save size={13} />}
+          disabled={!dirty || invalid}
+          loading={saving}
+          onClick={() => onSave(s.key, parsed)}
+        >
+          Save
+        </Button>
       </div>
     </div>
   );
 }
 
-function Row({ s, onSave }: { s: Setting; onSave: (key: string, value: number) => void }) {
-  const [value, setValue] = useState(String(s.value));
-  useEffect(() => { setValue(String(s.value)); }, [s.value]);
-  const dirty = parseFloat(value) !== s.value;
+function KillSwitches() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<Flag[]>({
+    queryKey: ["killswitches"],
+    queryFn: () => adminApi.killswitch.list().then((r) => r.data),
+  });
+
+  const set = useMutation({
+    mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) => adminApi.killswitch.set(key, enabled),
+    onSuccess: () => { toast.success("Switch updated."); qc.invalidateQueries({ queryKey: ["killswitches"] }); },
+    onError: () => toast.error("Could not flip the switch."),
+  });
+
+  const flags = data || [];
+  const live = flags.filter((f) => f.enabled);
+
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-muted-metal/20 last:border-0">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-deep-charcoal dark:text-cloud-grey">{s.label}</p>
-        <p className="text-xs text-warm-grey font-mono">{s.key}</p>
-      </div>
-      <input
-        className="input py-1.5 text-sm w-32 text-right"
-        type="number" step={s.type === "int" ? 1 : 0.01} min={0}
-        value={value} onChange={(e) => setValue(e.target.value)}
-      />
-      <button
-        onClick={() => onSave(s.key, parseFloat(value))}
-        disabled={!dirty || isNaN(parseFloat(value))}
-        className="btn-primary py-1.5 px-3 text-sm disabled:opacity-40 flex items-center gap-1.5"
-      >
-        <Save size={14} /> Save
-      </button>
-    </div>
+    <Panel
+      title="Emergency switches"
+      description="Flip to contain an incident. Takes effect within seconds, no redeploy."
+      icon={<ShieldAlert size={15} />}
+      actions={live.length > 0 ? <Badge tone="error">{live.length} engaged</Badge> : <Badge tone="success">All clear</Badge>}
+    >
+      {live.length > 0 && (
+        <div className="px-5 sm:px-6 pt-4">
+          <Callout tone="danger" icon={<ShieldAlert size={16} />} title="Switches are engaged">
+            <p>{live.map((f) => f.label).join(", ")} — traffic is being blocked right now.</p>
+          </Callout>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="p-5 space-y-2.5">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
+      ) : !flags.length ? (
+        <EmptyState icon={<ShieldAlert size={19} />} title="No switches configured" />
+      ) : (
+        <ul className="divide-y divide-line">
+          {flags.map((f) => (
+            <li key={f.key} className="flex items-center justify-between gap-4 px-5 sm:px-6 py-4">
+              <div className="min-w-0">
+                <p className="text-sm text-ink flex items-center gap-2">
+                  {f.label}
+                  {f.enabled && <Badge tone="error">On</Badge>}
+                </p>
+                <p className="text-2xs font-mono text-ink-3 mt-0.5">{f.key}</p>
+              </div>
+              <Switch
+                checked={f.enabled}
+                tone="danger"
+                label={`${f.enabled ? "Disengage" : "Engage"} ${f.label}`}
+                onChange={(v) => set.mutate({ key: f.key, enabled: v })}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
 
@@ -89,32 +140,44 @@ export default function Settings() {
 
   const save = useMutation({
     mutationFn: ({ key, value }: { key: string; value: number }) => adminApi.settings.update(key, value),
-    onSuccess: () => { toast.success("Saved"); qc.invalidateQueries({ queryKey: ["admin-settings"] }); },
-    onError: () => toast.error("Failed to save"),
+    onSuccess: () => { toast.success("Saved."); qc.invalidateQueries({ queryKey: ["admin-settings"] }); },
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Could not save."),
   });
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-deep-charcoal dark:text-cloud-grey flex items-center gap-2">
-            <SlidersHorizontal size={22} className="text-silk-gold" /> Platform Settings
-          </h1>
-          <p className="text-warm-grey mt-1">These take effect within seconds. No redeploy needed.</p>
-        </div>
+      <PageHeader
+        title="Platform Settings"
+        subtitle="Live values read on every request. Changes apply within seconds — no redeploy."
+      />
 
-        <div className="card">
-          {isLoading ? (
-            <p className="text-warm-grey text-sm">Loading...</p>
-          ) : (
-            (data || []).map((s) => (
-              <Row key={s.key} s={s} onSave={(key, value) => save.mutate({ key, value })} />
-            ))
-          )}
-        </div>
+      <Callout tone="warning" icon={<SlidersHorizontal size={17} />} title="These move real money">
+        <p>
+          Markup and reward percentages affect what every user is charged and what depositors earn on the
+          very next request. Change them deliberately.
+        </p>
+      </Callout>
 
-        <KillSwitches />
-      </div>
+      <Panel title="Values" icon={<SlidersHorizontal size={15} />}>
+        {isLoading ? (
+          <div className="p-5 space-y-2.5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
+        ) : !data?.length ? (
+          <EmptyState icon={<SlidersHorizontal size={19} />} title="No settings exposed" />
+        ) : (
+          <div className="divide-y divide-line">
+            {data.map((s) => (
+              <SettingRow
+                key={s.key}
+                s={s}
+                saving={save.isPending && save.variables?.key === s.key}
+                onSave={(key, value) => save.mutate({ key, value })}
+              />
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      <KillSwitches />
     </DashboardLayout>
   );
 }

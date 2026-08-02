@@ -1,80 +1,228 @@
 /**
  * DashboardLayout.tsx
- * Shared sidebar layout for both user and admin dashboards.
- * Responsive: sidebar collapses to a sheet on mobile. Includes a theme toggle
- * and a notifications bell with an unread badge.
+ * The application shell: sidebar, topbar, and the global command palette.
+ *
+ * Two things changed structurally from the previous shell. The sidebar and
+ * header are now painted from theme tokens rather than being permanently dark,
+ * which is what made light mode read as broken. And the sidebar collapses to an
+ * icon rail (persisted), so dense pages such as Model Control get their width
+ * back.
+ *
+ * `fullBleed` hands the main area over to the page — the chat view manages its
+ * own scrolling and needs the height.
  */
 
 // File: silkllm-frontend/src/components/layout/DashboardLayout.tsx
 
-import React, { useState } from "react";
-import { NavLink, Link, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { notificationsApi, trialApi } from "@/services/api";
 import PaymentReminderModal from "@/components/PaymentReminderModal";
+import CommandPalette from "@/components/CommandPalette";
+import { IconButton, Kbd, Menu, MenuItem, MenuLabel, MenuSeparator, Meter } from "@/components/ui";
 import {
   LayoutDashboard, Key, CreditCard, BarChart2, MessageSquare, Coins,
-  Settings, Bell, Users, Zap, PlusCircle, LogOut, Menu, Store,
-  SlidersHorizontal, ShieldCheck, Sun, Moon, Gift,
+  Settings, Bell, Users, Zap, PlusCircle, LogOut, Menu as MenuIcon, Store,
+  SlidersHorizontal, ShieldCheck, Sun, Moon, Monitor, Gift, Search,
+  PanelLeftClose, PanelLeftOpen, X, ChevronsUpDown, Wallet, BookOpen,
 } from "lucide-react";
 import clsx from "clsx";
 
-interface NavItem { label: string; href: string; icon: React.ReactNode; }
+interface NavItem { label: string; href: string; icon: React.ReactNode; end?: boolean }
 
 const USER_NAV: NavItem[] = [
-  { label: "Overview",     href: "/dashboard",              icon: <LayoutDashboard size={18} /> },
-  { label: "Chat",         href: "/dashboard/chat",         icon: <MessageSquare size={18} /> },
-  { label: "Provider Hub", href: "/dashboard/provider-hub", icon: <Coins size={18} /> },
-  { label: "API Keys",     href: "/dashboard/keys",         icon: <Key size={18} /> },
-  { label: "Billing",      href: "/dashboard/billing",      icon: <CreditCard size={18} /> },
-  { label: "Usage",        href: "/dashboard/usage",        icon: <BarChart2 size={18} /> },
+  { label: "Overview",     href: "/dashboard",              icon: <LayoutDashboard size={17} />, end: true },
+  { label: "Chat",         href: "/dashboard/chat",         icon: <MessageSquare size={17} /> },
+  { label: "Provider Hub", href: "/dashboard/provider-hub", icon: <Coins size={17} /> },
+  { label: "API Keys",     href: "/dashboard/keys",         icon: <Key size={17} /> },
+  { label: "Billing",      href: "/dashboard/billing",      icon: <CreditCard size={17} /> },
+  { label: "Usage",        href: "/dashboard/usage",        icon: <BarChart2 size={17} /> },
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { label: "Providers",    href: "/admin/providers",   icon: <Zap size={18} /> },
-  { label: "Models",       href: "/admin/models",      icon: <Settings size={18} /> },
-  { label: "Marketplace",  href: "/admin/marketplace", icon: <Store size={18} /> },
-  { label: "Top-Ups",      href: "/admin/topups",      icon: <PlusCircle size={18} /> },
-  { label: "Alerts",       href: "/admin/alerts",      icon: <Bell size={18} /> },
-  { label: "Credits",      href: "/admin/credits",     icon: <Users size={18} /> },
-  { label: "Settings",     href: "/admin/settings",    icon: <SlidersHorizontal size={18} /> },
+  { label: "Providers",   href: "/admin/providers",   icon: <Zap size={17} /> },
+  { label: "Models",      href: "/admin/models",      icon: <Settings size={17} /> },
+  { label: "Marketplace", href: "/admin/marketplace", icon: <Store size={17} /> },
+  { label: "Top-Ups",     href: "/admin/topups",      icon: <PlusCircle size={17} /> },
+  { label: "Alerts",      href: "/admin/alerts",      icon: <ShieldCheck size={17} /> },
+  { label: "Credits",     href: "/admin/credits",     icon: <Users size={17} /> },
+  { label: "Settings",    href: "/admin/settings",    icon: <SlidersHorizontal size={17} /> },
 ];
 
-function NavList({ items }: { items: NavItem[] }) {
+/** Route → page title, used by the topbar so every page names itself the same way. */
+const TITLES: Record<string, string> = {
+  "/dashboard": "Overview",
+  "/dashboard/chat": "Chat",
+  "/dashboard/provider-hub": "Provider Hub",
+  "/dashboard/keys": "API Keys",
+  "/dashboard/billing": "Billing",
+  "/dashboard/usage": "Usage",
+  "/dashboard/notifications": "Notifications",
+  "/admin/providers": "Providers",
+  "/admin/models": "Model Control",
+  "/admin/marketplace": "Marketplace",
+  "/admin/topups": "Top-Ups",
+  "/admin/alerts": "Alerts",
+  "/admin/credits": "Credits & Users",
+  "/admin/settings": "Platform Settings",
+};
+
+const COLLAPSE_KEY = "silk_sidebar_collapsed";
+
+// ── Sidebar pieces ──────────────────────────────────────────────────────────
+
+function NavList({ items, collapsed, onNavigate }: {
+  items: NavItem[]; collapsed: boolean; onNavigate?: () => void;
+}) {
   return (
-    <>
+    <div className="space-y-0.5">
       {items.map((item) => (
-        <NavLink key={item.href} to={item.href} end={item.href === "/dashboard"}
+        <NavLink
+          key={item.href}
+          to={item.href}
+          end={item.end}
+          onClick={onNavigate}
+          title={collapsed ? item.label : undefined}
           className={({ isActive }) => clsx(
-            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-            isActive ? "bg-silk-gold/10 text-silk-gold" : "text-warm-grey hover:text-cloud-grey hover:bg-slate-dark"
+            "relative flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+            collapsed ? "justify-center h-10 w-10 mx-auto" : "px-3 h-9",
+            isActive
+              ? "bg-accent/10 text-accent-ink"
+              : "text-ink-2 hover:text-ink hover:bg-ink/[0.05]",
           )}
         >
-          {item.icon}{item.label}
+          {({ isActive }) => (
+            <>
+              {isActive && !collapsed && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-accent" />
+              )}
+              <span className="shrink-0">{item.icon}</span>
+              {!collapsed && <span className="truncate">{item.label}</span>}
+            </>
+          )}
         </NavLink>
       ))}
-    </>
+    </div>
   );
 }
 
-function TrialPill() {
+function SectionLabel({ children, collapsed }: { children: React.ReactNode; collapsed: boolean }) {
+  if (collapsed) return <div className="h-px bg-line mx-3 my-3" />;
+  return (
+    <p className="px-3 pt-5 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      {children}
+    </p>
+  );
+}
+
+/** Trial allowance, shown only while a trial is live. */
+function TrialCard({ collapsed }: { collapsed: boolean }) {
   const { data: trial } = useQuery({
     queryKey: ["trial-status"],
     queryFn: () => trialApi.status().then((r) => r.data),
   });
   if (!trial?.active) return null;
+
+  const remaining = trial.daily_remaining_usd ?? 0;
+  const limit = trial.daily_limit_usd ?? 0;
+  const pct = limit > 0 ? Math.max(0, Math.min(100, (remaining / limit) * 100)) : 0;
+  const tone = pct <= 15 ? "danger" : pct <= 40 ? "warn" : "accent";
+
+  if (collapsed) {
+    return (
+      <Link
+        to="/dashboard/billing"
+        title={`Free trial · ${trial.days_remaining}d left`}
+        className="flex items-center justify-center h-10 w-10 mx-auto rounded-lg bg-accent/10 text-accent-ink hover:bg-accent/15 transition-colors"
+      >
+        <Gift size={17} />
+      </Link>
+    );
+  }
+
   return (
-    <NavLink to="/dashboard"
-      className="flex items-center gap-2 mx-1 mb-2 px-3 py-2 rounded-lg text-xs font-medium"
-      style={{ background: "rgba(210,154,45,0.12)", border: "1px solid rgba(210,154,45,0.3)", color: "#D29A2D" }}>
-      <Gift size={14} />
-      <span>Free trial</span>
-      <span className="ml-auto text-warm-grey">{trial.days_remaining}d left</span>
-    </NavLink>
+    <Link
+      to="/dashboard/billing"
+      className="block rounded-xl border border-accent/25 bg-accent/[0.07] p-3 hover:bg-accent/10 transition-colors"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <Gift size={14} className="text-accent-ink shrink-0" />
+        <span className="text-xs font-medium text-ink">Free trial</span>
+        <span className="ml-auto text-2xs text-ink-3 num">{trial.days_remaining}d left</span>
+      </div>
+      <Meter value={pct} tone={tone as any} size="sm" />
+      <p className="text-2xs text-ink-3 mt-1.5 num">
+        ${remaining.toFixed(4)} of ${limit.toFixed(2)} left today
+      </p>
+    </Link>
   );
 }
+
+function UserCard({ collapsed }: { collapsed: boolean }) {
+  const { user, isAdmin, logout } = useAuth();
+  const navigate = useNavigate();
+  const initial = user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U";
+
+  return (
+    <Menu
+      align="left"
+      width={228}
+      trigger={({ toggle }) => (
+        <button
+          onClick={toggle}
+          title={collapsed ? user?.name : undefined}
+          className={clsx(
+            "w-full flex items-center gap-2.5 rounded-lg transition-colors hover:bg-ink/[0.05]",
+            collapsed ? "justify-center h-10" : "px-2 py-2",
+          )}
+        >
+          <span className="w-7 h-7 rounded-full bg-accent text-on-accent text-xs font-semibold flex items-center justify-center shrink-0">
+            {initial}
+          </span>
+          {!collapsed && (
+            <>
+              <span className="flex-1 min-w-0 text-left">
+                <span className="block text-xs font-medium text-ink truncate">{user?.name}</span>
+                <span className="block text-2xs text-ink-3 truncate num">${(user?.balance ?? 0).toFixed(4)}</span>
+              </span>
+              <ChevronsUpDown size={14} className="text-ink-3 shrink-0" />
+            </>
+          )}
+        </button>
+      )}
+    >
+      {(close) => (
+        <>
+          <MenuLabel>{user?.email}</MenuLabel>
+          {isAdmin && (
+            <div className="px-2.5 pb-1.5">
+              <span className="badge-brand"><ShieldCheck size={10} /> Admin</span>
+            </div>
+          )}
+          <MenuSeparator />
+          <MenuItem icon={<Wallet size={15} />} onClick={() => { close(); navigate("/dashboard/billing"); }}>
+            Billing & credits
+          </MenuItem>
+          <MenuItem icon={<Key size={15} />} onClick={() => { close(); navigate("/dashboard/keys"); }}>
+            API keys
+          </MenuItem>
+          <MenuItem icon={<BookOpen size={15} />} onClick={() => { close(); window.open("/docs", "_blank"); }}>
+            Documentation
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem icon={<LogOut size={15} />} tone="danger" onClick={() => { close(); logout(); }}>
+            Sign out
+          </MenuItem>
+        </>
+      )}
+    </Menu>
+  );
+}
+
+// ── Topbar pieces ───────────────────────────────────────────────────────────
 
 function NotificationBell() {
   const navigate = useNavigate();
@@ -85,111 +233,219 @@ function NotificationBell() {
   });
   const unread = data || 0;
   return (
-    <button
+    <IconButton
+      label={unread > 0 ? `${unread} unread notifications` : "Notifications"}
       onClick={() => navigate("/dashboard/notifications")}
-      className="relative text-warm-grey hover:text-silk-gold transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-      title="Notifications"
+      className="relative"
     >
-      <Bell size={20} />
+      <Bell size={18} />
       {unread > 0 && (
-        <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-silk-gold text-white text-[10px] font-bold flex items-center justify-center">
+        <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-danger text-white text-[9px] font-bold flex items-center justify-center num">
           {unread > 99 ? "99+" : unread}
         </span>
       )}
-    </button>
+    </IconButton>
   );
 }
 
-function ThemeToggle() {
-  const { theme, toggle } = useTheme();
+function ThemeMenu() {
+  const { mode, resolved, setMode } = useTheme();
+  const Icon = mode === "system" ? Monitor : resolved === "dark" ? Moon : Sun;
   return (
-    <button
-      onClick={toggle}
-      className="text-warm-grey hover:text-silk-gold transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-      title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+    <Menu
+      width={170}
+      trigger={({ toggle }) => (
+        <IconButton label="Theme" onClick={toggle}><Icon size={18} /></IconButton>
+      )}
     >
-      {theme === "dark" ? <Sun size={19} /> : <Moon size={19} />}
-    </button>
+      {(close) => (
+        <>
+          {([
+            ["light", "Light", <Sun size={15} key="l" />],
+            ["dark", "Dark", <Moon size={15} key="d" />],
+            ["system", "System", <Monitor size={15} key="s" />],
+          ] as const).map(([value, label, icon]) => (
+            <MenuItem
+              key={value}
+              icon={icon}
+              onClick={() => { setMode(value); close(); }}
+              className={mode === value ? "!text-accent-ink !bg-accent/10" : undefined}
+            >
+              {label}
+            </MenuItem>
+          ))}
+        </>
+      )}
+    </Menu>
   );
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAdmin, logout } = useAuth();
-  const [open, setOpen] = useState(false);
+/** Balance, always one click from topping up. */
+function BalancePill() {
+  const { user } = useAuth();
+  const low = (user?.balance ?? 0) < 1;
+  return (
+    <Link
+      to="/dashboard/billing"
+      title="Credit balance"
+      className={clsx(
+        "hidden sm:inline-flex items-center gap-2 h-9 pl-3 pr-2.5 rounded-lg border text-xs font-medium transition-colors",
+        low
+          ? "border-warn/30 bg-warn/10 text-warn hover:bg-warn/15"
+          : "border-line bg-surface text-ink-2 hover:text-ink hover:border-line-strong",
+      )}
+    >
+      <Wallet size={14} className="shrink-0" />
+      <span className="num">${(user?.balance ?? 0).toFixed(4)}</span>
+      <span className="w-px h-4 bg-current opacity-20" />
+      <PlusCircle size={14} className="shrink-0" />
+    </Link>
+  );
+}
 
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      <div className="px-6 py-5 border-b border-muted-metal">
-        <Link to="/" className="font-display font-bold text-xl text-silk-gold">SilkLLM</Link>
-        {isAdmin && (
-          <div className="flex items-center gap-1 mt-1 text-xs text-warm-grey">
-            <ShieldCheck size={12} className="text-silk-gold" /> Admin
-          </div>
-        )}
-      </div>
+// ── Shell ───────────────────────────────────────────────────────────────────
 
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        <p className="text-xs text-muted-metal uppercase tracking-wider px-3 mb-2">Account</p>
-        <NavList items={USER_NAV} />
-        {isAdmin && (
-          <>
-            <p className="text-xs text-muted-metal uppercase tracking-wider px-3 mt-6 mb-2">Admin</p>
-            <NavList items={ADMIN_NAV} />
-          </>
-        )}
-      </nav>
+export default function DashboardLayout({ children, fullBleed }: {
+  children: React.ReactNode;
+  fullBleed?: boolean;
+}) {
+  const { isAdmin } = useAuth();
+  const { pathname } = useLocation();
+  const [drawer, setDrawer] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
+  });
 
-      <div className="px-4 py-4 border-t border-muted-metal">
-        <TrialPill />
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg">
-          <div className="w-8 h-8 rounded-full bg-silk-gold flex items-center justify-center text-white text-sm font-bold">
-            {user?.name?.[0]?.toUpperCase() || "U"}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-cloud-grey truncate">{user?.name}</p>
-            <p className="text-xs text-warm-grey truncate">${user?.balance?.toFixed(2)} credits</p>
-          </div>
-          <button onClick={logout} className="text-warm-grey hover:text-silk-gold transition-colors" title="Logout">
-            <LogOut size={16} />
-          </button>
+  const title = TITLES[pathname] || "Dashboard";
+
+  useEffect(() => {
+    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0"); } catch { /* private mode */ }
+  }, [collapsed]);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => { setDrawer(false); }, [pathname]);
+
+  // Global shortcuts: Cmd/Ctrl+K opens the palette, Cmd/Ctrl+B toggles the rail.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((p) => !p);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setCollapsed((c) => !c);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  const sidebar = (mobile = false) => {
+    const isCollapsed = collapsed && !mobile;
+    return (
+      <div className="flex flex-col h-full">
+        <div className={clsx("flex items-center h-14 shrink-0 border-b border-line", isCollapsed ? "justify-center px-2" : "px-4 gap-2")}>
+          <Link to="/" className="flex items-center gap-2 min-w-0" title="SilkLLM">
+            <span className="w-7 h-7 rounded-lg bg-accent text-on-accent font-display font-bold text-sm flex items-center justify-center shrink-0">
+              S
+            </span>
+            {!isCollapsed && <span className="font-display font-bold text-[15px] text-ink truncate">SilkLLM</span>}
+          </Link>
+          {mobile && (
+            <IconButton label="Close menu" size={32} className="ml-auto" onClick={() => setDrawer(false)}>
+              <X size={17} />
+            </IconButton>
+          )}
+        </div>
+
+        <nav className={clsx("flex-1 overflow-y-auto py-3", isCollapsed ? "px-2" : "px-3")}>
+          <NavList items={USER_NAV} collapsed={isCollapsed} onNavigate={mobile ? () => setDrawer(false) : undefined} />
+          {isAdmin && (
+            <>
+              <SectionLabel collapsed={isCollapsed}>Admin</SectionLabel>
+              <NavList items={ADMIN_NAV} collapsed={isCollapsed} onNavigate={mobile ? () => setDrawer(false) : undefined} />
+            </>
+          )}
+        </nav>
+
+        <div className={clsx("shrink-0 border-t border-line py-3 space-y-2", isCollapsed ? "px-2" : "px-3")}>
+          <TrialCard collapsed={isCollapsed} />
+          <UserCard collapsed={isCollapsed} />
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="flex h-screen bg-cloud-grey dark:bg-deep-charcoal">
-      <aside className="hidden lg:flex w-64 flex-col bg-slate-dark border-r border-muted-metal shrink-0">
-        <SidebarContent />
+    <div className="flex h-[100dvh] bg-page text-ink">
+      {/* Desktop sidebar */}
+      <aside
+        className={clsx(
+          "hidden lg:flex flex-col shrink-0 bg-surface border-r border-line transition-[width] duration-200",
+          collapsed ? "w-[68px]" : "w-[248px]",
+        )}
+      >
+        {sidebar()}
       </aside>
 
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-          <aside className="relative w-64 h-full bg-slate-dark flex flex-col">
-            <SidebarContent />
+      {/* Mobile drawer */}
+      {drawer && (
+        <div className="fixed inset-0 z-[70] lg:hidden">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] animate-fade-in" onClick={() => setDrawer(false)} />
+          <aside className="relative w-[272px] max-w-[85%] h-full bg-surface border-r border-line shadow-overlay animate-slide-in-left">
+            {sidebar(true)}
           </aside>
         </div>
       )}
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between gap-4 px-4 py-3 bg-slate-dark border-b border-muted-metal">
-          <button onClick={() => setOpen(true)} className="lg:hidden text-warm-grey min-h-[44px] min-w-[44px] flex items-center justify-center">
-            <Menu size={20} />
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Topbar */}
+        <header className="h-14 shrink-0 flex items-center gap-2 px-3 sm:px-5 bg-surface/85 backdrop-blur-md border-b border-line">
+          <IconButton label="Open menu" className="lg:hidden" onClick={() => setDrawer(true)}>
+            <MenuIcon size={19} />
+          </IconButton>
+          <IconButton
+            label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="hidden lg:inline-flex"
+            onClick={() => setCollapsed((c) => !c)}
+          >
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </IconButton>
+
+          <h1 className="text-sm font-semibold text-ink truncate">{title}</h1>
+
+          <div className="flex-1" />
+
+          {/* Command palette affordance — discoverable, not just a shortcut. */}
+          <button
+            onClick={() => setPalette(true)}
+            className="hidden md:inline-flex items-center gap-2 h-9 pl-3 pr-2 rounded-lg border border-line bg-sunken text-xs text-ink-3 hover:text-ink-2 hover:border-line-strong transition-colors w-[184px]"
+          >
+            <Search size={14} className="shrink-0" />
+            <span className="flex-1 text-left">Search…</span>
+            <Kbd>⌘K</Kbd>
           </button>
-          <span className="lg:hidden font-display font-bold text-silk-gold">SilkLLM</span>
-          <div className="hidden lg:block" />
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-            <NotificationBell />
-          </div>
+          <IconButton label="Search" className="md:hidden" onClick={() => setPalette(true)}>
+            <Search size={18} />
+          </IconButton>
+
+          <BalancePill />
+          <NotificationBell />
+          <ThemeMenu />
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
+        <main className={clsx("flex-1 min-h-0", fullBleed ? "overflow-hidden" : "overflow-y-auto")}>
+          {fullBleed ? children : (
+            <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+              <div className="mx-auto w-full max-w-[1180px] space-y-6">{children}</div>
+            </div>
+          )}
         </main>
       </div>
 
+      <CommandPalette open={palette} onClose={() => setPalette(false)} />
       <PaymentReminderModal />
     </div>
   );

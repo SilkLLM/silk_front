@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { AuthContext, useAuthState } from "@/hooks/useAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 
 // Lazy load pages for code splitting
 const Landing       = lazy(() => import("@/pages/public/Landing"));
@@ -57,9 +58,43 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 function LoadingSpinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cloud-grey">
-      <div className="w-8 h-8 border-4 border-silk-gold border-t-transparent rounded-full animate-spin" />
+    <div className="min-h-[100dvh] flex items-center justify-center bg-page">
+      <div className="w-8 h-8 border-[3px] border-accent border-t-transparent rounded-full animate-spin" />
     </div>
+  );
+}
+
+/**
+ * Toasts are painted from the theme tokens rather than fixed hexes, so they do
+ * not arrive as a bright cream card on a dark dashboard.
+ */
+function ThemedToaster() {
+  const { resolved } = useTheme();
+  const dark = resolved === "dark";
+  const surface = dark ? "#1E2122" : "#FFFFFF";
+  const ink = dark ? "#F2F1EE" : "#1A1918";
+  const line = dark ? "#2A2E30" : "#E5E2DB";
+
+  return (
+    <Toaster
+      position="top-right"
+      toastOptions={{
+        duration: 4000,
+        style: {
+          background: surface,
+          color: ink,
+          border: `1px solid ${line}`,
+          borderRadius: "12px",
+          fontSize: "13px",
+          padding: "10px 14px",
+          boxShadow: dark
+            ? "0 12px 32px -8px rgba(0,0,0,0.6)"
+            : "0 12px 32px -8px rgba(26,25,24,0.18)",
+        },
+        success: { iconTheme: { primary: dark ? "#3FBF6E" : "#0F7A3D", secondary: surface } },
+        error:   { iconTheme: { primary: dark ? "#F07570" : "#C4342F", secondary: surface } },
+      }}
+    />
   );
 }
 
@@ -110,13 +145,7 @@ export default function App() {
       <AuthContext.Provider value={authState}>
         <BrowserRouter>
           <AppRoutes />
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              style: { background: "#FEF1DC", color: "#191B1C", border: "1px solid #D29A2D" },
-              success: { iconTheme: { primary: "#D29A2D", secondary: "#FEF1DC" } },
-            }}
-          />
+          <ThemedToaster />
         </BrowserRouter>
       </AuthContext.Provider>
     </QueryClientProvider>

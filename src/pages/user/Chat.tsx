@@ -2,19 +2,30 @@
  * Chat.tsx
  * A local-first chat client. Conversations live only in this browser's
  * localStorage; SilkLLM never stores your chat content. You choose how long a
- * chat is kept before it auto-dissolves. Streams responses from any text model.
+ * chat is kept before it auto-dissolves. Streams responses from any text model,
+ * and generates image, audio and video from the same composer.
+ *
+ * The layout takes the shell's full height (`fullBleed`) and owns its own
+ * scrolling, so the message list scrolls independently of the composer.
  */
 
 // File: silkllm-frontend/src/pages/user/Chat.tsx
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Plus, Trash2, Send, Square, ShieldCheck, PanelLeft, X, Copy, Pencil, RefreshCw,
-  Type, Image as ImageIcon, AudioLines, Video, Sliders, Paperclip, Sparkles } from "lucide-react";
+import {
+  AudioLines, Copy, Image as ImageIcon, MessageSquare, Paperclip, PanelLeft,
+  Pencil, Plus, RefreshCw, Send, ShieldCheck, Sliders, Sparkles, Square,
+  Trash2, Type, Video, X,
+} from "lucide-react";
 import toast from "react-hot-toast";
+import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
 import { modelsApi, generateApi, mediaApi } from "@/services/api";
+import {
+  Button, Checkbox, EmptyState, Field, IconButton, Input, Meter, Modal, Select,
+} from "@/components/ui";
 
 type Role = "user" | "assistant" | "system";
 // Multimodal input parts (vision). Assistant replies are always plain strings.
@@ -25,7 +36,6 @@ type ContentPart =
 // so it can be regenerated the same way.
 interface Msg { role: Role; content: string | ContentPart[]; kind?: "text" | "image" | "audio" | "video"; }
 
-// Extract the plain text of a message (for copy, titles, and prompts).
 function messageText(content: string | ContentPart[]): string {
   if (typeof content === "string") return content;
   return content.filter((p) => p.type === "text").map((p) => (p as any).text).join(" ");
@@ -34,30 +44,27 @@ function messageImages(content: string | ContentPart[]): string[] {
   if (typeof content === "string") return [];
   return content.filter((p) => p.type === "image_url").map((p) => (p as any).image_url.url);
 }
+
 interface Conversation { id: string; title: string; model: string; createdAt: number; updatedAt: number; messages: Msg[]; }
 interface ChatStore { version: number; expiryDays: number; conversations: Conversation[]; }
 
 const KEY = "silk_chats";
 // Approx localStorage budget in UTF-16 code units (~5 MB quota, 2 bytes each).
-// Used to show a usage bar and warn before the browser refuses to save.
 const STORAGE_BUDGET = 2_500_000;
 
 type Mode = "text" | "image" | "audio" | "video";
 const MODES: { key: Mode; label: string; icon: React.ReactNode; placeholder: string }[] = [
-  { key: "text",  label: "Text",  icon: <Type size={13} />,       placeholder: "Message SilkLLM..." },
-  { key: "image", label: "Image", icon: <ImageIcon size={13} />,  placeholder: "Describe an image to generate..." },
-  { key: "audio", label: "Audio", icon: <AudioLines size={13} />, placeholder: "Enter text to turn into speech..." },
-  { key: "video", label: "Video", icon: <Video size={13} />,      placeholder: "Describe a video to generate..." },
+  { key: "text",  label: "Text",  icon: <Type size={13} />,       placeholder: "Message SilkLLM…" },
+  { key: "image", label: "Image", icon: <ImageIcon size={13} />,  placeholder: "Describe an image to generate…" },
+  { key: "audio", label: "Audio", icon: <AudioLines size={13} />, placeholder: "Enter text to turn into speech…" },
+  { key: "video", label: "Video", icon: <Video size={13} />,      placeholder: "Describe a video to generate…" },
 ];
 
-// Turn a returned image (URL or raw base64) into a markdown image the renderer
-// can display and offer a download for.
 function toImageContent(img: string): string {
   const src = /^https?:\/\//.test(img) || img.startsWith("data:") ? img : `data:image/png;base64,${img}`;
   return `![image](${src})`;
 }
 
-// OpenAI's fixed voice set (ElevenLabs speakers are fetched from the API).
 const OPENAI_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"];
 
 interface VoiceSettings { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean; }
@@ -89,8 +96,8 @@ function loadStore(): ChatStore {
 }
 
 function purge(store: ChatStore): ChatStore {
-  if (store.expiryDays < 0) return store; // never
-  if (store.expiryDays === 0) return { ...store, conversations: [] }; // session-only
+  if (store.expiryDays < 0) return store;
+  if (store.expiryDays === 0) return { ...store, conversations: [] };
   const cutoff = Date.now() - store.expiryDays * 86_400_000;
   return { ...store, conversations: store.conversations.filter((c) => c.updatedAt >= cutoff) };
 }
@@ -100,25 +107,15 @@ function uid() { return Math.random().toString(36).slice(2) + Date.now().toStrin
 function SliderRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
     <div>
-      <div className="flex justify-between text-[10px] text-warm-grey mb-1">
-        <span>{label}</span><span>{value.toFixed(2)}</span>
+      <div className="flex justify-between text-2xs text-ink-2 mb-1.5">
+        <span>{label}</span><span className="num">{value.toFixed(2)}</span>
       </div>
-      <input type="range" min={0} max={1} step={0.05} value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full accent-silk-gold" />
+      <input
+        type="range" min={0} max={1} step={0.05} value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full h-1 accent-accent cursor-pointer"
+      />
     </div>
-  );
-}
-
-function ActionBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      className="p-1.5 rounded-md text-warm-grey hover:text-silk-gold hover:bg-cloud-grey dark:hover:bg-deep-charcoal transition-colors"
-    >
-      {children}
-    </button>
   );
 }
 
@@ -135,11 +132,8 @@ export default function Chat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const audioFileRef = useRef<HTMLInputElement>(null);
-  // Pending image attachments (data URIs) for the next vision message.
   const [attachments, setAttachments] = useState<{ url: string; name: string }[]>([]);
-  // Source clip for voice conversion (speech-to-speech), audio mode.
   const [sourceAudio, setSourceAudio] = useState<{ name: string; file: File } | null>(null);
-  // Voice cloning dialog.
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneName, setCloneName] = useState("");
   const [cloneSamples, setCloneSamples] = useState<File[]>([]);
@@ -152,9 +146,6 @@ export default function Chat() {
   const [mode, setMode] = useState<Mode>("text");
   const [model, setModel] = useState<string>("");
 
-  // Models available for the current mode (grouped by modality). Speech-to-speech
-  // models are hidden from the audio text-to-speech picker; conversion is chosen
-  // via the "convert audio" action instead.
   const modeModels = useMemo(
     () => (allModels || []).filter((m: any) => {
       if ((m.modality || "text") !== mode) return false;
@@ -163,21 +154,19 @@ export default function Chat() {
     }),
     [allModels, mode],
   );
-  // Keep the selected model valid whenever the mode or catalogue changes.
+
   useEffect(() => {
     if (modeModels.length && !modeModels.some((m: any) => m.id === model)) {
       setModel(modeModels[0].id);
     }
   }, [modeModels, model]);
 
-  // Group the current mode's models by provider for the picker.
   const modelsByProvider = useMemo(() => {
     const g: Record<string, any[]> = {};
     for (const m of modeModels) (g[m.provider_id] ||= []).push(m);
     return g;
   }, [modeModels]);
 
-  // Voice controls (audio mode).
   const selectedModel = useMemo(() => modeModels.find((m: any) => m.id === model), [modeModels, model]);
   const isElevenlabs = selectedModel?.provider_id === "elevenlabs";
   const [voice, setVoice] = useState<string>("alloy");
@@ -192,7 +181,6 @@ export default function Chat() {
     retry: false,
   });
 
-  // Keep the selected speaker valid for the chosen provider.
   useEffect(() => {
     if (mode !== "audio") return;
     if (isElevenlabs) {
@@ -227,14 +215,13 @@ export default function Chat() {
     }
   }, [store]);
 
-  // Storage usage, for the progress bar and low-space warning.
   const usedChars = useMemo(() => JSON.stringify(store).length, [store]);
   const storagePct = Math.min(100, Math.round((usedChars / STORAGE_BUDGET) * 100));
   const storageMB = ((usedChars * 2) / 1048576).toFixed(2);
   const budgetMB = ((STORAGE_BUDGET * 2) / 1048576).toFixed(1);
+
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [activeId, liveText, store]);
 
-  // Image attachments only apply to text (vision) chat; source audio to audio.
   useEffect(() => { if (mode !== "text") setAttachments([]); }, [mode]);
   useEffect(() => { if (mode !== "audio") setSourceAudio(null); }, [mode]);
 
@@ -255,8 +242,6 @@ export default function Chat() {
     setStore((s) => ({ ...s, conversations: s.conversations.map((c) => (c.id === id ? updater(c) : c)) }));
   }
 
-  // Stream a completion for the given history and append the assistant reply to
-  // the conversation. The conversation's messages must already equal `history`.
   async function runGeneration(convId: string, history: Msg[]) {
     setStreaming(true);
     setLiveText("");
@@ -277,8 +262,6 @@ export default function Chat() {
     setStreaming(false);
   }
 
-  // Generate an image, audio clip, or video from a prompt and append it as an
-  // assistant message whose content the Markdown renderer displays inline.
   async function runMediaGeneration(
     convId: string, kind: Exclude<Mode, "text">, prompt: string,
     opts?: { modelId?: string; voice?: string; voiceSettings?: VoiceSettings; elevenlabs?: boolean },
@@ -315,7 +298,6 @@ export default function Chat() {
     }
   }
 
-  // Speech-to-speech: convert a source clip into the selected target speaker.
   async function runVoiceConversion(convId: string, file: File, targetVoice: string) {
     setStreaming(true);
     setLiveText("");
@@ -346,7 +328,10 @@ export default function Chat() {
   }
 
   async function doCloneVoice() {
-    if (!cloneName.trim() || cloneSamples.length === 0) { toast.error("Give the voice a name and at least one sample."); return; }
+    if (!cloneName.trim() || cloneSamples.length === 0) {
+      toast.error("Give the voice a name and at least one sample.");
+      return;
+    }
     setCloning(true);
     try {
       const form = new FormData();
@@ -414,7 +399,6 @@ export default function Chat() {
       setActiveId(convId);
     }
     const prompt = input.trim();
-    // Build multimodal content when images are attached (vision input).
     const content: string | ContentPart[] = attachments.length > 0
       ? [
           ...(prompt ? [{ type: "text", text: prompt } as ContentPart] : []),
@@ -441,8 +425,6 @@ export default function Chat() {
     toast.success("Copied");
   }
 
-  // Regenerate the assistant reply at `index`: discard it (and anything after)
-  // then re-run the same kind of generation from the preceding messages.
   function regenerate(index: number) {
     if (streaming || !activeId) return;
     const conv = store.conversations.find((c) => c.id === activeId);
@@ -458,8 +440,6 @@ export default function Chat() {
     }
   }
 
-  // Edit a user message: load it back into the composer and trim the
-  // conversation to before it, so sending produces a fresh exchange.
   function editMessage(index: number) {
     if (streaming || !activeId) return;
     const conv = store.conversations.find((c) => c.id === activeId);
@@ -474,103 +454,126 @@ export default function Chat() {
     updateConversation(activeId, (c) => ({ ...c, messages: c.messages.filter((_, i) => i !== index), updatedAt: Date.now() }));
   }
 
-  // Shared conversation list, used in both the desktop sidebar and the mobile drawer.
-  // onPick is called after selecting/creating a chat so the mobile drawer can close.
+  // Conversation list, shared between the desktop rail and the mobile drawer.
   const conversationList = (onPick: () => void) => (
     <>
-      <button onClick={() => { newChat(); onPick(); }} className="btn-primary w-full flex items-center justify-center gap-2 text-sm">
-        <Plus size={16} /> New chat
-      </button>
-      <div className="flex-1 overflow-y-auto mt-3 space-y-1">
-        {store.conversations.length === 0 && <p className="text-xs text-warm-grey px-2">No chats yet.</p>}
+      <div className="p-3 shrink-0">
+        <Button variant="primary" className="w-full" icon={<Plus size={15} />} onClick={() => { newChat(); onPick(); }}>
+          New chat
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+        {store.conversations.length === 0 && (
+          <p className="text-xs text-ink-3 px-3 py-4 text-center">No chats yet.</p>
+        )}
         {store.conversations.map((c) => (
-          <div key={c.id}
-            className={`group flex items-center gap-2 px-2.5 py-2.5 rounded-lg cursor-pointer text-sm ${
-              c.id === activeId ? "bg-silk-gold/10 text-silk-gold" : "text-warm-grey hover:bg-cloud-grey dark:hover:bg-deep-charcoal"
-            }`}
+          <div
+            key={c.id}
             onClick={() => { setActiveId(c.id); onPick(); }}
+            className={clsx(
+              "group flex items-center gap-2 px-2.5 h-9 rounded-lg cursor-pointer text-sm transition-colors",
+              c.id === activeId ? "bg-accent/10 text-accent-ink" : "text-ink-2 hover:text-ink hover:bg-ink/[0.05]",
+            )}
           >
             <MessageSquare size={14} className="shrink-0" />
             <span className="flex-1 truncate">{c.title}</span>
-            <button onClick={(e) => { e.stopPropagation(); deleteChat(c.id); }}
-              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-warm-grey hover:text-red-400 p-1 -m-1">
-              <Trash2 size={14} />
+            <button
+              onClick={(e) => { e.stopPropagation(); deleteChat(c.id); }}
+              aria-label={`Delete ${c.title}`}
+              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-ink-3 hover:text-danger p-1 -m-1 transition-opacity shrink-0"
+            >
+              <Trash2 size={13} />
             </button>
           </div>
         ))}
       </div>
-      <div className="mt-3 pt-3 border-t border-muted-metal/40">
-        <label className="text-[11px] text-warm-grey flex items-center gap-1 mb-1">
-          <ShieldCheck size={12} className="text-silk-gold" /> Keep chats for
-        </label>
-        <select className="input text-xs py-1.5" value={store.expiryDays}
-          onChange={(e) => setStore((s) => ({ ...s, expiryDays: parseInt(e.target.value) }))}>
-          {EXPIRY_OPTIONS.map((o) => <option key={o.days} value={o.days}>{o.label}</option>)}
-        </select>
-        <p className="text-[10px] text-muted-metal mt-1.5">Stored only in this browser. We never keep your chats.</p>
-      </div>
 
-      {/* Local storage usage */}
-      <div className="mt-3 pt-3 border-t border-muted-metal/40">
-        <div className="flex justify-between text-[10px] text-warm-grey mb-1">
-          <span>Storage used</span>
-          <span>{storageMB} / {budgetMB} MB</span>
-        </div>
-        <div className="w-full h-1.5 rounded-full bg-cloud-grey dark:bg-deep-charcoal overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${storagePct}%`, background: storagePct >= 85 ? "#ef4444" : storagePct >= 60 ? "#FAC059" : "#D29A2D" }} />
-        </div>
-        {storagePct >= 85 && (
-          <p className="text-[10px] text-red-400 mt-1">
-            Almost full. Delete old chats or media. When full, the oldest chats are removed automatically.
+      <div className="shrink-0 border-t border-line p-3 space-y-3">
+        <div>
+          <label className="text-2xs text-ink-2 flex items-center gap-1.5 mb-1.5">
+            <ShieldCheck size={12} className="text-accent-ink" /> Keep chats for
+          </label>
+          <Select
+            className="h-8 text-xs"
+            value={store.expiryDays}
+            onChange={(e) => setStore((s) => ({ ...s, expiryDays: parseInt(e.target.value) }))}
+          >
+            {EXPIRY_OPTIONS.map((o) => <option key={o.days} value={o.days}>{o.label}</option>)}
+          </Select>
+          <p className="text-2xs text-ink-3 mt-1.5 leading-relaxed">
+            Stored only in this browser. We never keep your chats.
           </p>
-        )}
+        </div>
+
+        <div>
+          <div className="flex justify-between text-2xs text-ink-3 mb-1.5 num">
+            <span>Storage</span>
+            <span>{storageMB} / {budgetMB} MB</span>
+          </div>
+          <Meter
+            value={storagePct}
+            size="sm"
+            tone={storagePct >= 85 ? "danger" : storagePct >= 60 ? "warn" : "accent"}
+          />
+          {storagePct >= 85 && (
+            <p className="text-2xs text-danger mt-1.5 leading-relaxed">
+              Almost full. Delete old chats or media — when full, the oldest chats are removed automatically.
+            </p>
+          )}
+        </div>
       </div>
     </>
   );
 
-  return (
-    <DashboardLayout>
-      <div className="flex gap-4 h-[calc(100vh-8rem)]">
-        {/* Conversation list (desktop) */}
-        <div className="hidden md:flex w-64 flex-col card p-3 shrink-0">
-          {conversationList(() => {})}
-        </div>
+  const activeMode = MODES.find((x) => x.key === mode);
 
-        {/* Conversation list (mobile drawer) */}
+  return (
+    <DashboardLayout fullBleed>
+      <div className="flex h-full min-h-0">
+        {/* Conversation rail (desktop) */}
+        <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-line bg-surface">
+          {conversationList(() => {})}
+        </aside>
+
+        {/* Conversation drawer (mobile) */}
         {drawerOpen && (
           <div className="md:hidden fixed inset-0 z-[60]">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white dark:bg-slate-dark border-r border-muted-metal/40 p-3 flex flex-col shadow-2xl">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-semibold text-deep-charcoal dark:text-cloud-grey">Your chats</span>
-                <button onClick={() => setDrawerOpen(false)} className="text-warm-grey hover:text-silk-gold p-1 -m-1">
-                  <X size={18} />
-                </button>
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] animate-fade-in" onClick={() => setDrawerOpen(false)} />
+            <div className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-surface border-r border-line shadow-overlay flex flex-col animate-slide-in-left">
+              <div className="flex items-center justify-between px-3 h-14 border-b border-line shrink-0">
+                <span className="text-sm font-semibold text-ink">Your chats</span>
+                <IconButton label="Close" size={32} onClick={() => setDrawerOpen(false)}><X size={16} /></IconButton>
               </div>
               {conversationList(() => setDrawerOpen(false))}
             </div>
           </div>
         )}
 
-        {/* Chat pane */}
-        <div className="flex-1 min-w-0 flex flex-col card p-0 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-muted-metal/40">
-            <button onClick={() => setDrawerOpen(true)}
-              className="md:hidden relative text-warm-grey hover:text-silk-gold p-1 -m-1 shrink-0" title="Your chats">
-              <PanelLeft size={20} />
+        {/* Conversation pane */}
+        <div className="flex-1 min-w-0 flex flex-col bg-page">
+          {/* Pane header */}
+          <div className="flex items-center gap-2 px-3 sm:px-4 h-14 shrink-0 border-b border-line bg-surface">
+            <IconButton label="Your chats" className="md:hidden relative" onClick={() => setDrawerOpen(true)}>
+              <PanelLeft size={18} />
               {store.conversations.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-silk-gold text-white text-[9px] font-semibold rounded-full min-w-[15px] h-[15px] px-0.5 flex items-center justify-center">
+                <span className="absolute top-1 right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-accent text-on-accent text-[9px] font-bold flex items-center justify-center num">
                   {store.conversations.length}
                 </span>
               )}
-            </button>
-            <MessageSquare size={16} className="text-silk-gold hidden md:block shrink-0" />
-            <span className="md:hidden flex-1 truncate text-sm font-medium text-deep-charcoal dark:text-cloud-grey">
+            </IconButton>
+
+            <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink">
               {active?.title || "New chat"}
             </span>
-            <select className="input py-1.5 text-sm w-auto max-w-[150px] sm:max-w-[220px] shrink-0 md:flex-none disabled:opacity-50"
-              value={model} onChange={(e) => setModel(e.target.value)} disabled={modeModels.length === 0}>
+
+            <Select
+              className="h-9 text-xs w-auto max-w-[160px] sm:max-w-[240px] shrink-0"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={modeModels.length === 0}
+              aria-label="Model"
+            >
               {modeModels.length === 0
                 ? <option value="">No {mode} models</option>
                 : Object.entries(modelsByProvider).map(([prov, list]) => (
@@ -580,251 +583,301 @@ export default function Chat() {
                       ))}
                     </optgroup>
                   ))}
-            </select>
-            <button onClick={newChat} className="md:hidden text-silk-gold p-1 -m-1 shrink-0" title="New chat"><Plus size={20} /></button>
+            </Select>
+
+            <IconButton label="New chat" className="md:hidden" onClick={newChat}><Plus size={18} /></IconButton>
           </div>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-            {!active || active.messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center">
-                <MessageSquare size={30} className="text-muted-metal mb-3" />
-                <p className="text-warm-grey text-sm">Start a conversation. Your chats stay on this device.</p>
-              </div>
-            ) : (
-              active.messages.map((m, i) => (
-                <div key={i} className={`group flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
-                  <div className={`max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                    m.role === "user" ? "bg-silk-gold text-white break-words" : "bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey"
-                  }`}>
-                    {m.role === "user" ? (
-                      <div className="space-y-2">
-                        {messageImages(m.content).length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {messageImages(m.content).map((src, k) => (
-                              <img key={k} src={src} alt="attachment" className="max-h-40 rounded-lg object-cover" />
-                            ))}
-                          </div>
-                        )}
-                        {messageText(m.content) && <span className="whitespace-pre-wrap">{messageText(m.content)}</span>}
-                      </div>
-                    ) : (
-                      <Markdown text={m.content as string} />
-                    )}
-                  </div>
-                  {/* Per-message actions: always visible on touch, hover-revealed on desktop */}
-                  <div className={`flex items-center gap-0.5 mt-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity ${
-                    m.role === "user" ? "flex-row-reverse" : ""
-                  }`}>
-                    <ActionBtn onClick={() => copyText(messageText(m.content))} title="Copy"><Copy size={14} /></ActionBtn>
-                    {m.role === "user" ? (
-                      <ActionBtn onClick={() => editMessage(i)} title="Edit"><Pencil size={14} /></ActionBtn>
-                    ) : (
-                      <ActionBtn onClick={() => regenerate(i)} title="Regenerate"><RefreshCw size={14} /></ActionBtn>
-                    )}
-                    <ActionBtn onClick={() => deleteMessage(i)} title="Delete"><Trash2 size={14} /></ActionBtn>
-                  </div>
+          {/* Messages */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
+            <div className="mx-auto w-full max-w-3xl px-4 py-6 space-y-5">
+              {!active || active.messages.length === 0 ? (
+                <div className="pt-16">
+                  <EmptyState
+                    icon={<MessageSquare size={19} />}
+                    title="Start a conversation"
+                    hint="Pick a model above and send a message. Everything stays on this device — switch modes below to generate images, speech or video."
+                  />
                 </div>
-              ))
-            )}
-            {streaming && (
-              <div className="flex justify-start">
-                <div className="max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-2.5 text-sm bg-cloud-grey dark:bg-deep-charcoal text-deep-charcoal dark:text-cloud-grey">
-                  {liveText ? <Markdown text={liveText} /> : (
-                    <span className="text-warm-grey inline-flex items-center gap-2">
-                      <RefreshCw size={13} className="animate-spin" />
-                      {mode === "text" ? "Thinking..." : `Generating ${mode}...`}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+              ) : (
+                active.messages.map((m, i) => (
+                  <div key={i} className={clsx("group flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
+                    <div className={clsx(
+                      "max-w-[88%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm",
+                      m.role === "user"
+                        ? "bg-accent text-on-accent break-words rounded-br-md"
+                        : "bg-surface border border-line text-ink rounded-bl-md",
+                    )}>
+                      {m.role === "user" ? (
+                        <div className="space-y-2">
+                          {messageImages(m.content).length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {messageImages(m.content).map((src, k) => (
+                                <img key={k} src={src} alt="attachment" className="max-h-40 rounded-lg object-cover" />
+                              ))}
+                            </div>
+                          )}
+                          {messageText(m.content) && <span className="whitespace-pre-wrap">{messageText(m.content)}</span>}
+                        </div>
+                      ) : (
+                        <Markdown text={m.content as string} />
+                      )}
+                    </div>
 
-          <div className="border-t border-muted-metal/40">
-            {/* Generation mode switcher */}
-            <div className="flex items-center gap-1 px-3 pt-2 overflow-x-auto">
-              {MODES.map((md) => (
-                <button
-                  key={md.key}
-                  onClick={() => setMode(md.key)}
-                  disabled={streaming}
-                  className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full whitespace-nowrap transition-colors disabled:opacity-50 ${
-                    mode === md.key
-                      ? "bg-silk-gold/15 text-silk-gold"
-                      : "text-warm-grey hover:text-silk-gold hover:bg-cloud-grey dark:hover:bg-deep-charcoal"
-                  }`}
-                >
-                  {md.icon} {md.label}
-                </button>
-              ))}
+                    {/* Per-message actions: always visible on touch, hover-revealed on desktop */}
+                    <div className={clsx(
+                      "flex items-center gap-0.5 mt-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity",
+                      m.role === "user" && "flex-row-reverse",
+                    )}>
+                      <IconButton label="Copy" size={28} onClick={() => copyText(messageText(m.content))}><Copy size={13} /></IconButton>
+                      {m.role === "user" ? (
+                        <IconButton label="Edit" size={28} onClick={() => editMessage(i)}><Pencil size={13} /></IconButton>
+                      ) : (
+                        <IconButton label="Regenerate" size={28} onClick={() => regenerate(i)}><RefreshCw size={13} /></IconButton>
+                      )}
+                      <IconButton label="Delete" size={28} tone="danger" onClick={() => deleteMessage(i)}><Trash2 size={13} /></IconButton>
+                    </div>
+                  </div>
+                ))
+              )}
+
+              {streaming && (
+                <div className="flex justify-start">
+                  <div className="max-w-[88%] sm:max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm bg-surface border border-line text-ink">
+                    {liveText ? <Markdown text={liveText} /> : (
+                      <span className="text-ink-2 inline-flex items-center gap-2">
+                        <RefreshCw size={13} className="animate-spin" />
+                        {mode === "text" ? "Thinking…" : `Generating ${mode}…`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
 
-            {/* Audio speaker + voice settings */}
-            {mode === "audio" && modeModels.length > 0 && (
-              <div className="px-3 pt-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <label className="text-[11px] text-warm-grey">Speaker</label>
-                  <select value={voice} onChange={(e) => setVoice(e.target.value)}
-                    className="input py-1 text-xs w-auto max-w-[220px]">
-                    {isElevenlabs
-                      ? (elVoices || []).map((v) => (
-                          <option key={v.voice_id} value={v.voice_id}>
-                            {v.name}{v.labels?.gender ? ` (${v.labels.gender})` : ""}
-                          </option>
-                        ))
-                      : OPENAI_VOICES.map((v) => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  {isElevenlabs && (
-                    <button onClick={() => setShowVoiceSettings((s) => !s)}
-                      className="text-[11px] text-silk-gold hover:underline inline-flex items-center gap-1">
-                      <Sliders size={12} /> Voice settings
-                    </button>
-                  )}
-                  {isElevenlabs && !elVoices && (
-                    <span className="text-[10px] text-muted-metal">Loading speakers...</span>
-                  )}
-                  {isElevenlabs && (
-                    <>
-                      <span className="text-muted-metal">|</span>
-                      <button onClick={() => audioFileRef.current?.click()}
-                        className="text-[11px] text-silk-gold hover:underline inline-flex items-center gap-1" title="Convert an audio clip into this speaker's voice">
-                        <AudioLines size={12} /> Convert audio
-                      </button>
-                      <button onClick={() => setCloneOpen(true)}
-                        className="text-[11px] text-silk-gold hover:underline inline-flex items-center gap-1" title="Clone a new voice from samples">
-                        <Sparkles size={12} /> Clone voice
-                      </button>
-                    </>
-                  )}
-                  <input ref={audioFileRef} type="file" accept="audio/*,video/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setSourceAudio({ name: f.name, file: f }); e.target.value = ""; }} />
-                </div>
-                {sourceAudio && (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-warm-grey bg-cloud-grey dark:bg-deep-charcoal rounded-lg px-3 py-2">
-                    <AudioLines size={14} className="text-silk-gold shrink-0" />
-                    <span className="flex-1 truncate">Convert <span className="font-medium">{sourceAudio.name}</span> to the selected speaker. Press send.</span>
-                    <button onClick={() => setSourceAudio(null)} className="text-warm-grey hover:text-red-400" title="Remove"><X size={14} /></button>
-                  </div>
-                )}
-                {isElevenlabs && showVoiceSettings && (
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-cloud-grey dark:bg-deep-charcoal">
-                    <SliderRow label="Stability" value={voiceSettings.stability}
-                      onChange={(v) => setVoiceSettings((s) => ({ ...s, stability: v }))} />
-                    <SliderRow label="Similarity" value={voiceSettings.similarity_boost}
-                      onChange={(v) => setVoiceSettings((s) => ({ ...s, similarity_boost: v }))} />
-                    <SliderRow label="Style" value={voiceSettings.style}
-                      onChange={(v) => setVoiceSettings((s) => ({ ...s, style: v }))} />
-                    <label className="flex items-center gap-2 text-xs text-warm-grey sm:col-span-3">
-                      <input type="checkbox" checked={voiceSettings.use_speaker_boost}
-                        onChange={(e) => setVoiceSettings((s) => ({ ...s, use_speaker_boost: e.target.checked }))}
-                        className="accent-silk-gold" />
-                      Speaker boost
-                    </label>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Attached image previews (vision input) */}
-            {attachments.length > 0 && (
-              <div className="px-3 pt-2 flex flex-wrap gap-2">
-                {attachments.map((a, i) => (
-                  <div key={i} className="relative group/att">
-                    <img src={a.url} alt={a.name} className="h-14 w-14 object-cover rounded-lg border border-muted-metal/40" />
-                    <button
-                      onClick={() => setAttachments((prev) => prev.filter((_, k) => k !== i))}
-                      className="absolute -top-1.5 -right-1.5 bg-slate-dark text-cloud-grey rounded-full p-0.5 border border-muted-metal/50"
-                      title="Remove"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
+          {/* Composer */}
+          <div className="shrink-0 border-t border-line bg-surface">
+            <div className="mx-auto w-full max-w-3xl px-3 sm:px-4 py-3">
+              {/* Mode switcher */}
+              <div className="flex items-center gap-1 mb-2.5 overflow-x-auto scroll-x">
+                {MODES.map((md) => (
+                  <button
+                    key={md.key}
+                    onClick={() => setMode(md.key)}
+                    disabled={streaming}
+                    aria-pressed={mode === md.key}
+                    className={clsx(
+                      "inline-flex items-center gap-1.5 text-xs font-medium px-3 h-7 rounded-full whitespace-nowrap transition-colors disabled:opacity-50",
+                      mode === md.key
+                        ? "bg-accent/12 text-accent-ink"
+                        : "text-ink-2 hover:text-ink hover:bg-ink/[0.05]",
+                    )}
+                  >
+                    {md.icon} {md.label}
+                  </button>
                 ))}
               </div>
-            )}
 
-            <div className="px-3 pb-3 pt-2 flex items-end gap-2">
-              <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
-                onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-              {mode === "text" && (
-                <button onClick={() => fileRef.current?.click()}
-                  className="btn-secondary shrink-0 px-2.5" title="Attach image (vision)">
-                  <Paperclip size={16} />
-                </button>
+              {/* Audio controls */}
+              {mode === "audio" && modeModels.length > 0 && (
+                <div className="mb-2.5 rounded-xl border border-line bg-sunken p-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-2xs text-ink-2">Speaker</label>
+                    <Select
+                      className="h-8 text-xs w-auto max-w-[220px]"
+                      value={voice}
+                      onChange={(e) => setVoice(e.target.value)}
+                    >
+                      {isElevenlabs
+                        ? (elVoices || []).map((v) => (
+                            <option key={v.voice_id} value={v.voice_id}>
+                              {v.name}{v.labels?.gender ? ` (${v.labels.gender})` : ""}
+                            </option>
+                          ))
+                        : OPENAI_VOICES.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </Select>
+
+                    {isElevenlabs && (
+                      <>
+                        <button
+                          onClick={() => setShowVoiceSettings((s) => !s)}
+                          className="text-2xs text-accent-ink hover:underline inline-flex items-center gap-1"
+                        >
+                          <Sliders size={12} /> Voice settings
+                        </button>
+                        <span className="w-px h-3.5 bg-line" />
+                        <button
+                          onClick={() => audioFileRef.current?.click()}
+                          className="text-2xs text-accent-ink hover:underline inline-flex items-center gap-1"
+                          title="Convert an audio clip into this speaker's voice"
+                        >
+                          <AudioLines size={12} /> Convert audio
+                        </button>
+                        <button
+                          onClick={() => setCloneOpen(true)}
+                          className="text-2xs text-accent-ink hover:underline inline-flex items-center gap-1"
+                          title="Clone a new voice from samples"
+                        >
+                          <Sparkles size={12} /> Clone voice
+                        </button>
+                        {!elVoices && <span className="text-2xs text-ink-3">Loading speakers…</span>}
+                      </>
+                    )}
+                    <input
+                      ref={audioFileRef} type="file" accept="audio/*,video/*" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) setSourceAudio({ name: f.name, file: f }); e.target.value = ""; }}
+                    />
+                  </div>
+
+                  {sourceAudio && (
+                    <div className="mt-2.5 flex items-center gap-2 text-xs text-ink-2 rounded-lg border border-line bg-surface px-3 py-2">
+                      <AudioLines size={14} className="text-accent-ink shrink-0" />
+                      <span className="flex-1 truncate">
+                        Convert <span className="font-medium text-ink">{sourceAudio.name}</span> to the selected speaker. Press send.
+                      </span>
+                      <IconButton label="Remove clip" size={26} tone="danger" onClick={() => setSourceAudio(null)}><X size={13} /></IconButton>
+                    </div>
+                  )}
+
+                  {isElevenlabs && showVoiceSettings && (
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-line">
+                      <SliderRow label="Stability" value={voiceSettings.stability}
+                        onChange={(v) => setVoiceSettings((s) => ({ ...s, stability: v }))} />
+                      <SliderRow label="Similarity" value={voiceSettings.similarity_boost}
+                        onChange={(v) => setVoiceSettings((s) => ({ ...s, similarity_boost: v }))} />
+                      <SliderRow label="Style" value={voiceSettings.style}
+                        onChange={(v) => setVoiceSettings((s) => ({ ...s, style: v }))} />
+                      <div className="sm:col-span-3">
+                        <Checkbox
+                          checked={voiceSettings.use_speaker_boost}
+                          onChange={(v) => setVoiceSettings((s) => ({ ...s, use_speaker_boost: v }))}
+                          label="Speaker boost"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-              <textarea
-                ref={textareaRef}
-                className="input flex-1 resize-none max-h-32"
-                rows={1}
-                placeholder={MODES.find((x) => x.key === mode)?.placeholder}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              />
-              {streaming ? (
-                mode === "text" ? (
-                  <button onClick={() => { stopRef.current = true; }} className="btn-secondary shrink-0" title="Stop">
-                    <Square size={16} />
-                  </button>
+
+              {/* Attachments */}
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2.5">
+                  {attachments.map((a, i) => (
+                    <div key={i} className="relative">
+                      <img src={a.url} alt={a.name} className="h-14 w-14 object-cover rounded-lg border border-line" />
+                      <button
+                        onClick={() => setAttachments((prev) => prev.filter((_, k) => k !== i))}
+                        aria-label={`Remove ${a.name}`}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-raised border border-line text-ink-2 hover:text-danger flex items-center justify-center shadow-xs"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Input row */}
+              <div className="flex items-end gap-2">
+                <input ref={fileRef} type="file" accept="image/*" multiple className="hidden"
+                  onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+                {mode === "text" && (
+                  <IconButton label="Attach an image" size={40} onClick={() => fileRef.current?.click()}
+                    className="border border-line bg-surface">
+                    <Paperclip size={16} />
+                  </IconButton>
+                )}
+                <textarea
+                  ref={textareaRef}
+                  className="input flex-1 resize-none max-h-40 min-h-[40px] py-2.5"
+                  rows={1}
+                  placeholder={activeMode?.placeholder}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                />
+                {streaming ? (
+                  mode === "text" ? (
+                    <IconButton label="Stop generating" size={40} onClick={() => { stopRef.current = true; }}
+                      className="border border-line bg-surface">
+                      <Square size={15} />
+                    </IconButton>
+                  ) : (
+                    <Button variant="primary" disabled className="h-10 w-10 !px-0" title="Generating">
+                      <RefreshCw size={16} className="animate-spin" />
+                    </Button>
+                  )
                 ) : (
-                  <button disabled className="btn-primary shrink-0 opacity-60 cursor-wait" title="Generating">
-                    <RefreshCw size={16} className="animate-spin" />
-                  </button>
-                )
-              ) : (
-                <button
-                  onClick={send}
-                  disabled={(!input.trim() && attachments.length === 0 && !(mode === "audio" && sourceAudio)) || (mode !== "text" && modeModels.length === 0)}
-                  className="btn-primary shrink-0 disabled:opacity-50"
-                  title="Send"
-                >
-                  <Send size={16} />
-                </button>
-              )}
-            </div>
+                  <Button
+                    variant="primary"
+                    className="h-10 w-10 !px-0"
+                    title="Send"
+                    aria-label="Send"
+                    onClick={send}
+                    disabled={
+                      (!input.trim() && attachments.length === 0 && !(mode === "audio" && sourceAudio)) ||
+                      (mode !== "text" && modeModels.length === 0)
+                    }
+                  >
+                    <Send size={16} />
+                  </Button>
+                )}
+              </div>
 
-            {mode !== "text" && (
-              <p className="px-3 pb-2 text-[10px] text-muted-metal">
-                {modeModels.length === 0
-                  ? `No ${mode} models are enabled yet. An admin can enable one under Model Control.`
-                  : `Generates ${mode} from your prompt. Results are kept only in this browser.`}
+              <p className="text-2xs text-ink-3 mt-2 leading-relaxed">
+                {mode !== "text"
+                  ? (modeModels.length === 0
+                      ? `No ${mode} models are enabled yet. An admin can enable one under Model Control.`
+                      : `Generates ${mode} from your prompt. Results are kept only in this browser.`)
+                  : "Enter to send, Shift+Enter for a new line."}
               </p>
-            )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Voice cloning dialog */}
-      {cloneOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !cloning && setCloneOpen(false)} />
-          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-dark border border-silk-gold/30 shadow-2xl p-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold text-deep-charcoal dark:text-cloud-grey flex items-center gap-2">
-                <Sparkles size={18} className="text-silk-gold" /> Clone a voice
-              </h2>
-              <button onClick={() => !cloning && setCloneOpen(false)} className="text-warm-grey hover:text-silk-gold"><X size={18} /></button>
-            </div>
-            <p className="text-xs text-warm-grey mb-4">Upload one or more clean audio samples (a minute of clear speech works well). The new voice becomes available as a speaker.</p>
-            <label className="text-xs text-warm-grey">Voice name</label>
-            <input value={cloneName} onChange={(e) => setCloneName(e.target.value)} placeholder="e.g. My voice"
-              className="input mt-1 mb-3" />
-            <label className="text-xs text-warm-grey">Samples</label>
-            <input type="file" accept="audio/*" multiple className="input mt-1 text-xs"
-              onChange={(e) => setCloneSamples(Array.from(e.target.files || []))} />
-            {cloneSamples.length > 0 && (
-              <p className="text-[11px] text-warm-grey mt-1">{cloneSamples.length} sample{cloneSamples.length > 1 ? "s" : ""} selected</p>
-            )}
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setCloneOpen(false)} disabled={cloning} className="btn-secondary flex-1 text-sm">Cancel</button>
-              <button onClick={doCloneVoice} disabled={cloning || !cloneName.trim() || cloneSamples.length === 0}
-                className="btn-primary flex-1 text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                {cloning ? <><RefreshCw size={14} className="animate-spin" /> Cloning...</> : <><Sparkles size={14} /> Clone</>}
-              </button>
-            </div>
-          </div>
+      {/* Voice cloning */}
+      <Modal
+        open={cloneOpen}
+        onClose={() => !cloning && setCloneOpen(false)}
+        title="Clone a voice"
+        description="Upload one or more clean samples — about a minute of clear speech works well. The new voice becomes available as a speaker."
+        icon={<Sparkles size={17} />}
+        footer={
+          <>
+            <Button variant="ghost" disabled={cloning} onClick={() => setCloneOpen(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={cloning}
+              disabled={!cloneName.trim() || cloneSamples.length === 0}
+              onClick={doCloneVoice}
+              icon={<Sparkles size={14} />}
+            >
+              Clone voice
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Voice name" required>
+            <Input value={cloneName} onChange={(e) => setCloneName(e.target.value)} placeholder="e.g. My voice" />
+          </Field>
+          <Field
+            label="Samples"
+            required
+            hint={cloneSamples.length > 0
+              ? `${cloneSamples.length} sample${cloneSamples.length > 1 ? "s" : ""} selected`
+              : "Audio files only."}
+          >
+            <input
+              type="file" accept="audio/*" multiple
+              className="input text-xs py-2 file:mr-3 file:rounded-md file:border-0 file:bg-accent/12 file:px-2.5 file:py-1 file:text-xs file:text-accent-ink file:font-medium"
+              onChange={(e) => setCloneSamples(Array.from(e.target.files || []))}
+            />
+          </Field>
         </div>
-      )}
+      </Modal>
     </DashboardLayout>
   );
 }

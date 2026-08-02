@@ -66,7 +66,9 @@ function MediaAttachment({ url, kind, alt }: { url: string; kind: MediaKind; alt
   const DownloadBtn = (
     <button
       onClick={() => downloadUrl(url, name)}
-      className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-black/30 text-cloud-grey hover:bg-black/50 hover:text-silk-gold transition-colors"
+      className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg
+                 bg-raised/95 backdrop-blur-sm border border-line text-ink-2 shadow-xs
+                 hover:text-ink transition-colors"
       title="Download"
     >
       <Download size={13} /> Download
@@ -77,7 +79,7 @@ function MediaAttachment({ url, kind, alt }: { url: string; kind: MediaKind; alt
     return (
       <div className="my-2 group/media relative inline-block max-w-full">
         <img src={url} alt={alt || "attachment"} loading="lazy"
-          className="rounded-xl max-w-full max-h-96 object-contain border border-muted-metal/30" />
+          className="rounded-xl max-w-full max-h-96 object-contain border border-line" />
         <div className="absolute top-2 right-2 opacity-0 group-hover/media:opacity-100 transition-opacity">
           {DownloadBtn}
         </div>
@@ -95,18 +97,18 @@ function MediaAttachment({ url, kind, alt }: { url: string; kind: MediaKind; alt
   if (kind === "video") {
     return (
       <div className="my-2">
-        <video controls src={url} className="rounded-xl max-w-full max-h-96 border border-muted-metal/30" />
+        <video controls src={url} className="rounded-xl max-w-full max-h-96 border border-line" />
         <div className="mt-1.5">{DownloadBtn}</div>
       </div>
     );
   }
   // Generic downloadable file
   return (
-    <div className="my-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-cloud-grey dark:bg-deep-charcoal border border-muted-metal/30 max-w-full">
-      <FileDown size={16} className="text-silk-gold shrink-0" />
-      <span className="text-xs font-mono truncate flex-1 min-w-0">{name}</span>
+    <div className="my-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-sunken border border-line max-w-full">
+      <FileDown size={16} className="text-accent-ink shrink-0" />
+      <span className="text-xs font-mono truncate flex-1 min-w-0 text-ink-2">{name}</span>
       <button onClick={() => downloadUrl(url, name)}
-        className="text-warm-grey hover:text-silk-gold shrink-0" title="Download">
+        className="text-ink-3 hover:text-ink shrink-0" title="Download">
         <Download size={15} />
       </button>
     </div>
@@ -122,8 +124,7 @@ function renderInline(text: string, keyBase: string): React.ReactNode[] {
     const k = `${keyBase}-${i}`;
     if (tok.startsWith("`") && tok.endsWith("`")) {
       return (
-        <code key={k} className="px-1 py-0.5 rounded font-mono text-[0.85em]"
-          style={{ background: "#00000022", color: "#D29A2D" }}>
+        <code key={k} className="px-1.5 py-0.5 rounded font-mono text-[0.85em] bg-ink/[0.07] text-accent-ink">
           {tok.slice(1, -1)}
         </code>
       );
@@ -134,7 +135,7 @@ function renderInline(text: string, keyBase: string): React.ReactNode[] {
       const href = link[2];
       return (
         <a key={k} href={href} target="_blank" rel="noopener noreferrer"
-          className="text-silk-gold hover:underline inline-flex items-center gap-0.5 break-all">
+          className="text-accent-ink hover:underline inline-flex items-center gap-0.5 break-all">
           {label}<ExternalLink size={11} className="shrink-0" />
         </a>
       );
@@ -156,14 +157,14 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="my-2 rounded-lg overflow-hidden" style={{ border: "1px solid #1E2022" }}>
-      <div className="flex items-center justify-between px-3 py-1.5" style={{ background: "#111314" }}>
-        <span className="text-[11px] font-mono text-warm-grey">{lang || "code"}</span>
-        <button onClick={copy} className="text-warm-grey hover:text-silk-gold inline-flex items-center gap-1 text-[11px]">
-          {copied ? <><Check size={12} /> Copied</> : <><Copy size={13} /> Copy</>}
+    <div className="my-2 rounded-lg overflow-hidden border border-line">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-sunken border-b border-line">
+        <span className="text-[11px] font-mono text-ink-3">{lang || "code"}</span>
+        <button onClick={copy} className="text-ink-3 hover:text-ink inline-flex items-center gap-1 text-[11px] transition-colors">
+          {copied ? <><Check size={12} className="text-success" /> Copied</> : <><Copy size={13} /> Copy</>}
         </button>
       </div>
-      <pre className="p-3 overflow-x-auto text-xs font-mono leading-relaxed" style={{ background: "#0D0E0F", color: "#C2C9CC", margin: 0 }}>
+      <pre className="p-3 overflow-x-auto text-xs font-mono leading-relaxed bg-sunken text-ink-2 m-0">
         <code>{code}</code>
       </pre>
     </div>
