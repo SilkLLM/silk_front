@@ -618,6 +618,68 @@ for (const [shape, adminPromotions] of Object.entries(ADMIN_PROMO_SHAPES)) {
   await page.close();
 }
 
+// ── Signing in when the backend is dead must not leave the app ──────────────
+{
+  // OAuth is a full page navigation, so a dead backend used to hand the browser
+  // its own 502 page with no React left to catch it.
+  const page = await browser.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewport({ width: 1280, height: 900 });
+  let navigatedAway = false;
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    const url = new URL(req.url());
+    if (url.pathname.includes("/auth/google/login")) { navigatedAway = true; return req.abort(); }
+    if (url.pathname.startsWith("/api/") || url.pathname === "/health" || url.pathname === "/ready") {
+      return req.abort();
+    }
+    if (url.origin !== new URL(BASE).origin) return req.abort();
+    req.continue();
+  });
+  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+  await new Promise((r) => setTimeout(r, 1200));
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent.includes("Continue with Google"))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 2000));
+  const text = await page.evaluate(() => document.body.innerText);
+  record("signing in with a dead backend never navigates away", !navigatedAway);
+  record("signing in with a dead backend shows the maintenance screen",
+         /be back shortly|you are offline/i.test(text), text.slice(0, 80));
+  record("the guarded sign-in raises no page error", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── A 503 from the schema gate is treated as an outage, not a bug ───────────
+{
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 900 });
+  await page.evaluateOnNewDocument(() => {
+    localStorage.setItem("silk_token", "test-token");
+    localStorage.setItem("silk_install_dismissed_at", String(Date.now()));
+  });
+  await page.setRequestInterception(true);
+  page.on("request", (req) => {
+    const url = new URL(req.url());
+    if (url.pathname.startsWith("/api/")) {
+      return req.respond({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: { code: "service_starting", message: "Finishing an update." } }),
+      });
+    }
+    if (url.origin !== new URL(BASE).origin) return req.abort();
+    req.continue();
+  });
+  await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded" });
+  await new Promise((r) => setTimeout(r, 2000));
+  const text = await page.evaluate(() => document.body.innerText);
+  record("a 503 while the schema updates shows the maintenance screen",
+         /be back shortly|you are offline/i.test(text), text.slice(0, 80));
+  await page.close();
+}
+
 await browser.close();
 
 const failed = results.filter((r) => !r.pass);

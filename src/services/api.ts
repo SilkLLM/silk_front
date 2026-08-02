@@ -84,10 +84,54 @@ api.interceptors.response.use(
 
 // ── Typed API helpers ──────────────────────────────────────────────────────
 
+/** The origin the API lives on, without the /api suffix. */
+const ORIGIN = BASE_URL.replace(/\/api\/?$/, "");
+
+/**
+ * Whether the backend can actually complete a sign-in right now.
+ *
+ * Checked before starting OAuth because that step is a full browser navigation
+ * away from this app. If the backend is down, the browser renders its own error
+ * page and there is no React left to catch it: the maintenance screen never
+ * gets a chance to appear, and the customer sees a raw 502. Asking first is the
+ * only way to keep them inside the app.
+ *
+ * `/ready` is the right question, since signing in needs the database rather
+ * than merely a listening process. A backend too old to have that route answers
+ * 404, so the check falls back to `/health` instead of blocking login against a
+ * server that is perfectly fine.
+ */
+async function canSignIn(): Promise<boolean> {
+  const ask = async (path: string) => {
+    try {
+      return await fetch(`${ORIGIN}${path}`, { cache: "no-store" });
+    } catch {
+      return null;
+    }
+  };
+
+  const ready = await ask("/ready");
+  if (ready?.ok) return true;
+  if (ready && ready.status === 503) return false;   // up, but not serving yet
+
+  const health = await ask("/health");
+  return !!health?.ok;
+}
+
+async function startOAuth(provider: "google" | "github"): Promise<boolean> {
+  if (!(await canSignIn())) {
+    notifyServiceDown();
+    return false;
+  }
+  window.location.href = `${BASE_URL}/auth/${provider}/login`;
+  return true;
+}
+
 export const authApi = {
   me: () => api.get("/auth/me"),
-  googleLogin: () => { window.location.href = `${BASE_URL}/auth/google/login`; },
-  githubLogin: () => { window.location.href = `${BASE_URL}/auth/github/login`; },
+  /** Resolves false when the backend could not take the sign-in. */
+  googleLogin: () => startOAuth("google"),
+  githubLogin: () => startOAuth("github"),
 };
 
 /**

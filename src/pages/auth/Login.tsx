@@ -8,7 +8,7 @@
 
 // File: silkllm-frontend/src/pages/auth/Login.tsx
 
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Github, ShieldCheck } from "lucide-react";
@@ -27,6 +27,21 @@ function GoogleIcon() {
 }
 
 export default function Login() {
+  // OAuth is a full page navigation away from this app, so the backend is asked
+  // whether it can take the sign-in before we leave. If it cannot, the app shows
+  // its maintenance screen instead of the browser showing a 502.
+  const [busy, setBusy] = useState<"google" | "github" | null>(null);
+
+  const start = async (provider: "google" | "github") => {
+    setBusy(provider);
+    const went = await (provider === "google"
+      ? authApi.googleLogin()
+      : authApi.githubLogin());
+    // On success the browser is already navigating away, so only a refusal
+    // needs the button restored.
+    if (!went) setBusy(null);
+  };
+
   return (
     <div className="min-h-[100dvh] bg-page flex items-center justify-center px-4 py-10">
       <motion.div
@@ -50,23 +65,27 @@ export default function Login() {
 
           <div className="space-y-2.5">
             <button
-              onClick={() => authApi.googleLogin()}
+              onClick={() => start("google")}
+              disabled={!!busy}
               className="w-full flex items-center justify-center gap-3 h-11 rounded-lg
                          bg-white text-[#1f1f1f] font-medium text-sm border border-line
-                         shadow-xs hover:brightness-[0.98] active:brightness-95 transition-all"
+                         shadow-xs hover:brightness-[0.98] active:brightness-95 transition-all
+                         disabled:opacity-60 disabled:cursor-wait"
             >
               <GoogleIcon />
-              Continue with Google
+              {busy === "google" ? "Connecting..." : "Continue with Google"}
             </button>
 
             <button
-              onClick={() => authApi.githubLogin()}
+              onClick={() => start("github")}
+              disabled={!!busy}
               className="w-full flex items-center justify-center gap-3 h-11 rounded-lg
                          bg-[#1b1f23] text-white font-medium text-sm border border-transparent
-                         shadow-xs hover:brightness-125 active:brightness-100 transition-all"
+                         shadow-xs hover:brightness-125 active:brightness-100 transition-all
+                         disabled:opacity-60 disabled:cursor-wait"
             >
               <Github size={17} />
-              Continue with GitHub
+              {busy === "github" ? "Connecting..." : "Continue with GitHub"}
             </button>
           </div>
 
