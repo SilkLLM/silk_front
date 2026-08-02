@@ -169,6 +169,18 @@ for (const theme of ["dark", "light"]) {
       width: vp.width, height: vp.height,
       deviceScaleFactor: 1, isMobile: vp.mobile, hasTouch: vp.mobile,
     });
+    if (vp.mobile) {
+      // The tap-target rules are scoped to coarse pointers, which puppeteer
+      // cannot emulate, so they are switched back on explicitly for the touch
+      // runs. Without this the audit would measure the desktop code path.
+      await page.evaluateOnNewDocument(() => {
+        addEventListener("DOMContentLoaded", () => {
+          const s = document.createElement("style");
+          s.textContent = ".tap-target::before{display:block !important}";
+          document.head.appendChild(s);
+        });
+      });
+    }
     await page.setRequestInterception(true);
     page.on("request", (req) => {
       const url = new URL(req.url());
@@ -202,7 +214,7 @@ for (const theme of ["dark", "light"]) {
       }
       await new Promise((r) => setTimeout(r, 500));
 
-      const result = await page.evaluate(() => {
+      const result = await page.evaluate((checkTargets) => {
         const doc = document.documentElement;
         const vw = doc.clientWidth;
         const pageOverflow = Math.max(doc.scrollWidth, document.body.scrollWidth) - vw;
@@ -231,19 +243,32 @@ for (const theme of ["dark", "light"]) {
         }
 
         // Controls smaller than the platform minimum are hard to hit on touch.
+        // The measurement is of the *hit* area, not the painted box: a small
+        // control carrying a .tap-target pseudo-element is genuinely easy to
+        // press even though its own rect is tiny, so that counts.
         const tiny = [];
-        for (const el of document.querySelectorAll("button, a[href], [role='button'], input, select")) {
+        for (const el of checkTargets
+          ? document.querySelectorAll("button, a[href], [role='button'], input, select")
+          : []) {
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
-          if (r.height < 24 || r.width < 24) {
-            tiny.push({ tag: el.tagName.toLowerCase(), w: Math.round(r.width), h: Math.round(r.height),
+
+          let w = r.width, h = r.height;
+          const before = getComputedStyle(el, "::before");
+          if (before && before.content !== "none") {
+            w = Math.max(w, parseFloat(before.minWidth) || 0, parseFloat(before.width) || 0);
+            h = Math.max(h, parseFloat(before.minHeight) || 0, parseFloat(before.height) || 0);
+          }
+
+          if (h < 24 || w < 24) {
+            tiny.push({ tag: el.tagName.toLowerCase(), w: Math.round(w), h: Math.round(h),
                         label: (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 40) });
           }
           if (tiny.length >= 5) break;
         }
 
         return { pageOverflow, culprits, tiny, title: document.title };
-      });
+      }, vp.mobile);
 
       if (result.pageOverflow > 1) {
         findings.push({

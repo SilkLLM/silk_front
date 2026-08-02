@@ -338,7 +338,7 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
       actions={
         <div className="flex items-center gap-3">
           <Badge tone="neutral">{providers.length} providers, {(models || []).length} models</Badge>
-          <button onClick={toggleAll} className="text-xs text-accent-ink hover:underline whitespace-nowrap">
+          <button onClick={toggleAll} className="inline-flex items-center h-8 px-2 -mx-1 rounded text-xs text-accent-ink hover:underline whitespace-nowrap">
             {allOpen ? "Collapse all" : "Expand all"}
           </button>
         </div>

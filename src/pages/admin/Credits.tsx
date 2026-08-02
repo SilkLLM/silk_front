@@ -158,7 +158,7 @@ export default function AdminCredits() {
                   <option value="suspended">Suspended</option>
                 </Select>
                 {filtersActive && (
-                  <button onClick={clearFilters} className="text-xs text-accent-ink hover:underline inline-flex items-center gap-1">
+                  <button onClick={clearFilters} className="text-xs text-accent-ink hover:underline inline-flex items-center gap-1 h-8 px-1">
                     <X size={12} /> Clear
                   </button>
                 )}

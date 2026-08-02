@@ -80,7 +80,7 @@ export default function Login() {
         </div>
 
         <p className="text-center mt-6">
-          <Link to="/" className="text-sm text-ink-2 hover:text-ink transition-colors inline-flex items-center gap-1.5">
+          <Link to="/" className="text-sm text-ink-2 hover:text-ink transition-colors inline-flex items-center gap-1.5 min-h-[36px] px-2">
             <ArrowLeft size={14} /> Back to home
           </Link>
         </p>

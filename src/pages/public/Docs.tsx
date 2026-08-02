@@ -293,7 +293,7 @@ function CodeBlock({ code, lang = "python" }: { code: string; lang?: string }) {
         <span className="text-2xs font-mono text-ink-3">{label[lang] || lang}</span>
         <button
           onClick={copy}
-          className="inline-flex items-center gap-1.5 text-2xs text-ink-3 hover:text-ink transition-colors"
+          className="inline-flex items-center gap-1.5 h-8 px-2 -mr-2 rounded text-2xs text-ink-3 hover:text-ink hover:bg-ink/[0.05] transition-colors"
         >
           {copied ? <><CheckCircle size={11} className="text-success" /> Copied</> : <><Copy size={11} /> Copy</>}
         </button>
@@ -393,8 +393,12 @@ const SECTIONS = [
     body: (
       <>
         <Para>Get your first response in under two minutes.</Para>
-        <ol className="space-y-2 mb-5 text-sm" style={{ color: "#C2C9CC" }}>
-          <li>1. <Link to="/login" className="underline decoration-dotted" style={{ color: "#D29A2D" }}>Create an account</Link> via Google or GitHub.</li>
+        {/* The link carries vertical padding rather than a taller line height:
+            on an inline element, padding grows the hit box but does not grow
+            the line box, so the target gets comfortable without the sentence
+            around it shifting. */}
+        <ol className="space-y-2.5 mb-5 text-sm leading-8 text-ink-2">
+          <li>1. <Link to="/login" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">Create an account</Link> via Google or GitHub.</li>
           <li>2. Create an API key under <Pill>API Keys</Pill>.</li>
           <li>3. Add credits under <Pill>Billing</Pill>, or use your free trial.</li>
           <li>4. Install an SDK and make your first call.</li>
@@ -457,7 +461,7 @@ const SECTIONS = [
     id: "marketplace", label: "BYOK Marketplace", icon: <Coins size={14} />,
     body: (
       <>
-        <Para>Deposit your own provider keys. A <strong style={{ color: "#EDEFF0" }}>public</strong> key is used only by our routing engine to serve other users (never shown to anyone), and you earn 75% of the provider cost as credits. A <strong style={{ color: "#EDEFF0" }}>private</strong> key serves only you.</Para>
+        <Para>Deposit your own provider keys. A <strong className="text-ink">public</strong> key is used only by our routing engine to serve other users (never shown to anyone), and you earn 75% of the provider cost as credits. A <strong className="text-ink">private</strong> key serves only you.</Para>
         <LangTabs python={CODE.pyByok} javascript={CODE.jsByok} />
         <H3>Endpoints</H3>
         <DocTable
@@ -513,7 +517,7 @@ const SECTIONS = [
           ]}
         />
         <H3>Voices and speakers (ElevenLabs)</H3>
-        <Para>For expressive speech, pick an ElevenLabs model and a speaker, and shape delivery with voice settings (stability, similarity, style, speaker boost). List the speakers on your account, then pass a <code className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: "#1A1C1D", color: "#D29A2D" }}>voice</code> id. OpenAI TTS uses fixed voice names (alloy, echo, fable, onyx, nova, shimmer) instead.</Para>
+        <Para>For expressive speech, pick an ElevenLabs model and a speaker, and shape delivery with voice settings (stability, similarity, style, speaker boost). List the speakers on your account, then pass a <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-ink/[0.06] text-accent-ink border border-line">voice</code> id. OpenAI TTS uses fixed voice names (alloy, echo, fable, onyx, nova, shimmer) instead.</Para>
         <LangTabs python={CODE.pyVoice} javascript={CODE.jsVoice} />
         <H3>Voice cloning and speech-to-speech</H3>
         <Para>Clone a speaker from your own audio samples, then use it for text-to-speech or to convert an existing clip into that voice (speech-to-speech). Conversion is priced per second of source audio.</Para>
@@ -527,7 +531,7 @@ const SECTIONS = [
     body: (
       <>
         <Para>The dashboard includes a full chat client that is local-first: your conversations live only in your browser and you choose how long they are kept before they dissolve. SilkLLM never stores your chat content; only usage metadata (tokens, cost, model) is recorded.</Para>
-        <Callout>Open the chat from your <Link to="/login" className="underline decoration-dotted" style={{ color: "#D29A2D" }}>dashboard</Link>. It works on your balance, your free trial, or your own deposited key.</Callout>
+        <Callout>Open the chat from your <Link to="/login" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">dashboard</Link>. It works on your balance, your free trial, or your own deposited key.</Callout>
       </>
     ),
   },
@@ -572,7 +576,7 @@ const SECTIONS = [
         <H3>List models by modality</H3>
         <LangTabs python={CODE.pyModels} javascript={CODE.jsModels} />
         <H3>Handle errors</H3>
-        <Para>Free models are free only during your trial; once you are paying from balance a request needs credit, so handle <code className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: "#1A1C1D", color: "#D29A2D" }}>InsufficientBalanceError</code> and prompt the user to top up.</Para>
+        <Para>Free models are free only during your trial; once you are paying from balance a request needs credit, so handle <code className="font-mono text-xs px-1.5 py-0.5 rounded bg-ink/[0.06] text-accent-ink border border-line">InsufficientBalanceError</code> and prompt the user to top up.</Para>
         <LangTabs python={CODE.pyErrors} javascript={CODE.jsErrors} />
       </>
     ),

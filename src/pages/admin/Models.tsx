@@ -322,16 +322,16 @@ export default function AdminModels() {
                 Showing {filtered.length} of {all.length}
               </span>
               {filtersActive && (
-                <button onClick={clearFilters} className="text-xs text-accent-ink hover:underline inline-flex items-center gap-1">
+                <button onClick={clearFilters} className="text-xs text-accent-ink hover:underline inline-flex items-center gap-1 h-8 px-1">
                   <X size={12} /> Clear filters
                 </button>
               )}
             </div>
             <div className="flex gap-3 text-xs">
-              <button onClick={() => setCollapsed({})} className="text-accent-ink hover:underline">Expand all</button>
+              <button onClick={() => setCollapsed({})} className="inline-flex items-center h-8 px-2 rounded text-accent-ink hover:underline">Expand all</button>
               <button
                 onClick={() => setCollapsed(Object.fromEntries(groupKeys.map((k) => [k, true])))}
-                className="text-accent-ink hover:underline"
+                className="inline-flex items-center h-8 px-2 rounded text-accent-ink hover:underline"
               >
                 Collapse all
               </button>

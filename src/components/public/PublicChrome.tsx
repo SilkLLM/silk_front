@@ -228,10 +228,10 @@ export function PublicFooter() {
           {FOOTER_GROUPS.map((g) => (
             <div key={g.title}>
               <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{g.title}</p>
-              <ul className="mt-3 space-y-2.5">
+              <ul className="mt-3 space-y-0.5">
                 {g.links.map((l) => (
                   <li key={l.label}>
-                    <a href={l.href} className="text-sm text-ink-2 hover:text-ink transition-colors">
+                    <a href={l.href} className="inline-flex items-center min-h-[34px] text-sm text-ink-2 hover:text-ink transition-colors">
                       {l.label}
                     </a>
                   </li>

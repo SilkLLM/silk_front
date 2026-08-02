@@ -300,7 +300,12 @@ export function Switch({
         // p-0 and border-0 matter: a button carries default padding and border,
         // and the knob is positioned against the padding box, so without them
         // the "on" position pushed the knob clear of the track.
-        "relative rounded-full shrink-0 p-0 border-0 overflow-hidden",
+        "relative rounded-full shrink-0 p-0 border-0",
+        // The track is deliberately small, which makes it an awkward touch
+        // target. tap-target grows the hit area without changing the visual.
+        // (No overflow-hidden here: it would clip that hit area, and the knob
+        // geometry is computed from the track size so it cannot escape.)
+        "tap-target",
         "transition-colors duration-150 disabled:cursor-not-allowed",
         pending && "opacity-70",
         (disabled && !pending) && "opacity-40",

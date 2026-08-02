@@ -173,7 +173,7 @@ function CodePanel() {
             setCopied(true);
             setTimeout(() => setCopied(false), 1600);
           }}
-          className="inline-flex items-center gap-1 text-2xs text-ink-3 hover:text-ink transition-colors"
+          className="inline-flex items-center gap-1 h-8 px-2 -mr-2 rounded text-2xs text-ink-3 hover:text-ink hover:bg-ink/[0.05] transition-colors"
         >
           {copied ? <><Check size={12} className="text-success" /> Copied</> : <><Copy size={12} /> Copy</>}
         </button>
