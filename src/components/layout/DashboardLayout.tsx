@@ -40,6 +40,7 @@ const USER_NAV: NavItem[] = [
   { label: "Chat",         href: "/dashboard/chat",         icon: <MessageSquare size={17} /> },
   { label: "Provider Hub", href: "/dashboard/provider-hub", icon: <Coins size={17} /> },
   { label: "API Keys",     href: "/dashboard/keys",         icon: <Key size={17} /> },
+  { label: "Budgets",      href: "/dashboard/budgets",      icon: <Users size={17} /> },
   { label: "Billing",      href: "/dashboard/billing",      icon: <CreditCard size={17} /> },
   { label: "Usage",        href: "/dashboard/usage",        icon: <BarChart2 size={17} /> },
 ];
@@ -60,6 +61,7 @@ const TITLES: Record<string, string> = {
   "/dashboard/chat": "Chat",
   "/dashboard/provider-hub": "Provider Hub",
   "/dashboard/keys": "API Keys",
+  "/dashboard/budgets": "Budgets & Webhooks",
   "/dashboard/billing": "Billing",
   "/dashboard/usage": "Usage",
   "/dashboard/notifications": "Notifications",

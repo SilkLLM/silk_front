@@ -27,7 +27,7 @@ const VIEWPORTS = [
 const ROUTES = [
   "/", "/docs", "/login",
   "/dashboard", "/dashboard/chat", "/dashboard/usage", "/dashboard/billing",
-  "/dashboard/keys", "/dashboard/provider-hub", "/dashboard/notifications",
+  "/dashboard/keys", "/dashboard/budgets", "/dashboard/provider-hub", "/dashboard/notifications",
   "/admin/providers", "/admin/models", "/admin/marketplace", "/admin/topups",
   "/admin/alerts", "/admin/credits", "/admin/settings",
 ];
@@ -94,6 +94,22 @@ const FIXTURES = {
     status: "active", created_at: new Date().toISOString(), last_used: new Date().toISOString(),
     earned_credits_total: 3.21, requests_served: 1234, provider_cost_served: 4.3,
   })),
+  "/budgets": Array.from({ length: 4 }, (_, i) => ({
+    id: `pool${i}`, name: "Mobile platform team, Europe and North America",
+    spend_limit_usd: i === 3 ? null : 100 + i * 50, spent_usd: i === 1 ? 250 : 42.5,
+    key_count: 3 + i, created_at: new Date().toISOString(), limit_reset_at: null,
+  })),
+  "/webhooks": Array.from({ length: 3 }, (_, i) => ({
+    id: `wh${i}`,
+    url: "https://a-really-quite-long-hostname.example.com/integrations/silkllm/limit-events",
+    events: ["key.limit_reached", "key.threshold_reached", "pool.limit_reached"],
+    is_active: i !== 2, last_status: i === 1 ? 500 : 200,
+    last_error: i === 1 ? "HTTP 500 from the endpoint, which returned a long body" : null,
+    last_delivery_at: new Date().toISOString(), consecutive_failures: i === 1 ? 3 : 0,
+  })),
+  "/webhooks/events": [
+    "key.limit_reached", "key.threshold_reached", "pool.limit_reached", "pool.threshold_reached", "key.revoked",
+  ],
   "/billing/rate": { usd_to_ngn_rate: 1650.42, effective_rate: 1815.46 },
   "/admin/providers": ["openai", "anthropic", "google", "deepseek", "xai"].map((id, i) => ({
     id, name: id[0].toUpperCase() + id.slice(1), enabled: i !== 2, has_api_key: true,
@@ -258,6 +274,17 @@ for (const theme of ["dark", "light"]) {
           if (before && before.content !== "none") {
             w = Math.max(w, parseFloat(before.minWidth) || 0, parseFloat(before.width) || 0);
             h = Math.max(h, parseFloat(before.minHeight) || 0, parseFloat(before.height) || 0);
+          }
+
+          // A checkbox or radio inside a label is pressed by tapping anywhere on
+          // that label, so the label's box is the hit area. Measuring the input
+          // alone reports a 16px target for a control that is comfortably a full
+          // row wide, which is a measurement bug rather than a real finding.
+          const owner = el.closest("label")
+            || (el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null);
+          if (owner && owner !== el) {
+            const lr = owner.getBoundingClientRect();
+            if (lr.width > 0 && lr.height > 0) { w = Math.max(w, lr.width); h = Math.max(h, lr.height); }
           }
 
           if (h < 24 || w < 24) {

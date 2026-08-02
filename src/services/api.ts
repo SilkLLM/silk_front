@@ -80,28 +80,114 @@ function normaliseKey(k: any) {
     is_active: k?.is_active ?? true,
     last_used: k?.last_used ?? null,
     limit_reset_at: k?.limit_reset_at ?? null,
+    alert_at_percent: k?.alert_at_percent ?? null,
+    allowed_models: k?.allowed_models ?? null,
+    allowed_providers: k?.allowed_providers ?? null,
+    rate_limit_per_min: k?.rate_limit_per_min ?? null,
+    budget_pool_id: k?.budget_pool_id ?? null,
   };
 }
 
+/**
+ * Everything that can be configured on a key at creation time.
+ * All optional: a key with none of these set behaves exactly as keys always have.
+ */
+export interface KeyControls {
+  /** Caps how much of your balance this key may draw. Omit for no cap. */
+  spend_limit_usd?: number | null;
+  /** Notify at this percentage of the cap, e.g. 80. Needs a cap to mean anything. */
+  alert_at_percent?: number | null;
+  /** Only these model ids may be used. Omit to allow every model. */
+  allowed_models?: string[] | null;
+  /** Only these provider ids may be used. Omit to allow every provider. */
+  allowed_providers?: string[] | null;
+  /** Requests per minute ceiling for this key alone. */
+  rate_limit_per_min?: number | null;
+  /** Draw against a shared team budget as well as the key's own cap. */
+  budget_pool_id?: string | null;
+}
+
+/**
+ * Removals are explicit flags rather than nulls.
+ *
+ * An omitted field has to keep meaning "leave this alone", otherwise a form
+ * that only edits the name would wipe every limit on the key.
+ */
+export interface KeyUpdate extends KeyControls {
+  name?: string;
+  is_active?: boolean;
+  clear_spend_limit?: boolean;
+  clear_alert?: boolean;
+  clear_scope?: boolean;
+  clear_rate_limit?: boolean;
+  clear_budget_pool?: boolean;
+}
+
+/**
+ * Force a list response to be a list.
+ *
+ * A backend mid-deploy, an error body, or a paginated envelope all answer with
+ * something that is not an array, and `(data || []).map` throws on every one of
+ * them because an object is truthy. Callers render lists, so they get a list.
+ */
+function asArray<T = any>(data: any, key?: string): T[] {
+  if (Array.isArray(data)) return data;
+  if (key && Array.isArray(data?.[key])) return data[key];
+  return [];
+}
+
 export const keysApi = {
-  list: () => api.get("/keys").then((r) => ({ ...r, data: (r.data || []).map(normaliseKey) })),
-  /** `spendLimitUsd` caps how much of your balance this key may draw. Omit for no cap. */
-  create: (name: string, spendLimitUsd?: number) =>
-    api.post("/keys", { name, spend_limit_usd: spendLimitUsd ?? null })
-      .then((r) => ({ ...r, data: normaliseKey(r.data) })),
-  /** Rename, change the cap, or disable. Pass clear_spend_limit to remove a cap. */
-  update: (id: string, data: {
-    name?: string;
-    spend_limit_usd?: number;
-    clear_spend_limit?: boolean;
-    is_active?: boolean;
-  }) => api.patch(`/keys/${id}`, data).then((r) => ({ ...r, data: normaliseKey(r.data) })),
+  list: () => api.get("/keys").then((r) => ({ ...r, data: asArray(r.data, "keys").map(normaliseKey) })),
+  create: (name: string, controls: KeyControls = {}) =>
+    api.post("/keys", { name, ...controls }).then((r) => ({ ...r, data: normaliseKey(r.data) })),
+  update: (id: string, data: KeyUpdate) =>
+    api.patch(`/keys/${id}`, data).then((r) => ({ ...r, data: normaliseKey(r.data) })),
   revoke: (id: string) => api.delete(`/keys/${id}`),
   /** Per-key request history, newest first. Includes refused attempts. */
   usage: (id: string, page = 1, pageSize = 50, status?: string) =>
     api.get(`/keys/${id}/usage`, { params: { page, page_size: pageSize, status } }),
   /** Zero the spend counter. Does not touch the history or refund anything. */
   reset: (id: string) => api.post(`/keys/${id}/reset`),
+  /**
+   * Download the full history as a file.
+   *
+   * Fetched as a blob rather than linking to the URL directly: the export needs
+   * the Authorization header, which a plain anchor cannot send.
+   */
+  exportUsage: async (id: string, format: "csv" | "json" = "csv") => {
+    const resp = await api.get(`/keys/${id}/usage/export`, {
+      params: { format }, responseType: "blob",
+    });
+    const url = URL.createObjectURL(new Blob([resp.data]));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `silkllm-key-usage-${id.slice(0, 8)}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+};
+
+/** Shared budgets. Several keys draw on one limit, for a team or an environment. */
+export const budgetsApi = {
+  list: () => api.get("/budgets").then((r) => ({ ...r, data: asArray(r.data, "budgets") })),
+  create: (name: string, spendLimitUsd?: number | null) =>
+    api.post("/budgets", { name, spend_limit_usd: spendLimitUsd ?? null }),
+  update: (id: string, data: { name?: string; spend_limit_usd?: number; clear_spend_limit?: boolean }) =>
+    api.patch(`/budgets/${id}`, data),
+  reset: (id: string) => api.post(`/budgets/${id}/reset`),
+  remove: (id: string) => api.delete(`/budgets/${id}`),
+};
+
+/** Outbound notifications for limit events, signed with HMAC-SHA256. */
+export const webhooksApi = {
+  list: () => api.get("/webhooks").then((r) => ({ ...r, data: asArray(r.data, "webhooks") })),
+  /** The signing secret comes back once, on create, and is never shown again. */
+  create: (url: string, events: string[]) => api.post("/webhooks", { url, events }),
+  test: (id: string) => api.post(`/webhooks/${id}/test`),
+  remove: (id: string) => api.delete(`/webhooks/${id}`),
+  events: () => api.get("/webhooks/events").then((r) => ({ ...r, data: asArray<string>(r.data, "events") })),
 };
 
 export const balanceApi = {

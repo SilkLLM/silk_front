@@ -22,6 +22,7 @@ const Login         = lazy(() => import("@/pages/auth/Login"));
 const Callback      = lazy(() => import("@/pages/auth/Callback"));
 const UserDashboard = lazy(() => import("@/pages/user/Dashboard"));
 const ApiKeys       = lazy(() => import("@/pages/user/ApiKeys"));
+const Budgets       = lazy(() => import("@/pages/user/Budgets"));
 const Billing       = lazy(() => import("@/pages/user/Billing"));
 const Usage         = lazy(() => import("@/pages/user/Usage"));
 const ProviderHub   = lazy(() => import("@/pages/user/ProviderHub"));
@@ -115,6 +116,7 @@ function AppRoutes() {
         {/* User dashboard */}
         <Route path="/dashboard" element={<ProtectedRoute><UserDashboard /></ProtectedRoute>} />
         <Route path="/dashboard/keys"    element={<ProtectedRoute><ApiKeys /></ProtectedRoute>} />
+        <Route path="/dashboard/budgets"  element={<ProtectedRoute><Budgets /></ProtectedRoute>} />
         <Route path="/dashboard/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
         <Route path="/dashboard/usage"   element={<ProtectedRoute><Usage /></ProtectedRoute>} />
         <Route path="/dashboard/provider-hub"  element={<ProtectedRoute><ProviderHub /></ProtectedRoute>} />

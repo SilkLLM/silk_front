@@ -56,7 +56,7 @@ const KEY_SHAPES = {
   empty: [],
 };
 
-async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200 } = {}) {
+async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200, budgets = POOL_SHAPES.full, hooks = HOOK_SHAPES.healthy } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -114,6 +114,19 @@ async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200 } = 
       }
       return json({ total: 0, entries: [] });
     }
+    if (p === "/api/budgets" && req.method() === "POST") {
+      return json({ id: "p-new", name: "Team", spend_limit_usd: 25, spent_usd: 0,
+                    key_count: 0, created_at: new Date().toISOString() }, 201);
+    }
+    if (p === "/api/budgets") return json(budgets);
+    if (p === "/api/webhooks/events") return json(WEBHOOK_EVENTS);
+    if (p === "/api/webhooks" && req.method() === "POST") {
+      // The secret comes back once, on create, and never again.
+      return json({ id: "wh-new", url: "https://example.com/hook", events: ["key.limit_reached"],
+                    is_active: true, secret: "s".repeat(64), last_status: null, last_error: null,
+                    last_delivery_at: null, consecutive_failures: 0 }, 201);
+    }
+    if (p === "/api/webhooks") return json(hooks);
     if (p === "/api/models") return json({ models: [] });
     if (p === "/api/trial") return json({ active: false });
     if (p === "/api/notifications/unread-count") return json({ unread: 0 });
@@ -130,6 +143,40 @@ async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200 } = 
   });
   return { page, errors };
 }
+
+// The real event names, as served by GET /api/webhooks/events.
+const WEBHOOK_EVENTS = [
+  "key.limit_reached", "key.threshold_reached", "pool.limit_reached", "pool.threshold_reached", "key.revoked",
+];
+
+/**
+ * Budget and webhook shapes, including the ones a half-deployed or erroring
+ * backend produces. `{}` is the important one: it is truthy, so every
+ * `(data || []).map` throws on it, which is how the keys page broke.
+ */
+const POOL_SHAPES = {
+  full: [{ id: "p1", name: "Mobile team", spend_limit_usd: 100, spent_usd: 42.5,
+           key_count: 3, created_at: new Date().toISOString(), limit_reset_at: null }],
+  uncapped: [{ id: "p2", name: "Reporting", spend_limit_usd: null, spent_usd: 12,
+               key_count: 1, created_at: new Date().toISOString() }],
+  exhausted: [{ id: "p3", name: "Staging", spend_limit_usd: 10, spent_usd: 10,
+                key_count: 2, created_at: new Date().toISOString() }],
+  nulls: [{ id: "p4", name: "Partial", spend_limit_usd: null, spent_usd: null,
+            key_count: null, created_at: new Date().toISOString() }],
+  empty: [],
+  notAList: {},
+};
+
+const HOOK_SHAPES = {
+  healthy: [{ id: "h1", url: "https://example.com/hook", events: ["key.limit_reached"],
+              is_active: true, last_status: 200, last_error: null,
+              last_delivery_at: new Date().toISOString(), consecutive_failures: 0 }],
+  failing: [{ id: "h2", url: "https://example.com/down", events: ["pool.limit_reached"],
+              is_active: false, last_status: 500, last_error: "HTTP 500",
+              last_delivery_at: new Date().toISOString(), consecutive_failures: 10 }],
+  empty: [],
+  notAList: {},
+};
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -207,6 +254,66 @@ for (const [shape, keys] of Object.entries(KEY_SHAPES)) {
   }
   record("no request is rejected as invalid", rejected.length === 0, rejected.slice(0, 2).join(", "));
   record("dashboard routes raise no page errors", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── Budgets page: every shape, including responses that are not lists ───────
+for (const [shape, budgets] of Object.entries(POOL_SHAPES)) {
+  const { page, errors } = await newPage(browser, { budgets });
+  await page.goto(`${BASE}/dashboard/budgets`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  record(`budgets page renders with a "${shape}" budget response`, errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+for (const [shape, hooks] of Object.entries(HOOK_SHAPES)) {
+  const { page, errors } = await newPage(browser, { hooks });
+  await page.goto(`${BASE}/dashboard/budgets`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  record(`budgets page renders with a "${shape}" webhook response`, errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── Creating a webhook shows the secret exactly once ────────────────────────
+{
+  const { page, errors } = await newPage(browser);
+  await page.goto(`${BASE}/dashboard/budgets`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.type('input[placeholder^="https://your-app"]', "https://example.com/hook");
+  await page.evaluate(() => {
+    // The first event checkbox. The button stays disabled until one is picked,
+    // which is itself worth exercising.
+    const boxes = [...document.querySelectorAll("input[type=checkbox]")];
+    boxes[boxes.length - 4]?.click();
+  });
+  await new Promise((r) => setTimeout(r, 250));
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Add webhook"))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  const shown = await page.evaluate(() => document.body.innerText.includes("Save your signing secret"));
+  record("creating a webhook does not throw", errors.length === 0, errors[0] || "");
+  record("the signing secret dialog opens", shown);
+  await page.close();
+}
+
+// ── A key can be given every control without the page throwing ──────────────
+{
+  const { page, errors } = await newPage(browser, { keys: KEY_SHAPES.full });
+  await page.goto(`${BASE}/dashboard/keys`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 600));
+  await page.type('input[placeholder^="Name this key"]', "Fully controlled");
+  // Tick the cap, its alert, the model allowlist and the rate limit in turn.
+  for (const i of [0, 1, 2, 3]) {
+    await page.evaluate((n) => {
+      document.querySelectorAll("input[type=checkbox]")[n]?.click();
+    }, i);
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const blocked = await page.evaluate(() =>
+    document.body.innerText.includes("Choose at least one model"));
+  record("an empty model allowlist blocks creation with a reason", blocked);
+  record("toggling every control raises no page error", errors.length === 0, errors[0] || "");
   await page.close();
 }
 

@@ -377,12 +377,19 @@ export function ToggleField({
   );
 }
 
-export function Checkbox({ checked, onChange, label, hint, disabled }: {
-  checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; hint?: React.ReactNode; disabled?: boolean;
+export function Checkbox({ checked, onChange, label, hint, disabled, className }: {
+  checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; hint?: React.ReactNode;
+  disabled?: boolean;
+  /**
+   * Extra classes on the label, which is the element that gets tapped.
+   * Padding belongs here rather than on a wrapper: a wrapper is not clickable,
+   * so padding it makes the control look roomier without making it easier to hit.
+   */
+  className?: string;
 }) {
   const id = useId();
   return (
-    <label htmlFor={id} className={clsx("flex items-start gap-2.5 cursor-pointer group", disabled && "opacity-50 cursor-not-allowed")}>
+    <label htmlFor={id} className={clsx("flex items-start gap-2.5 cursor-pointer group", disabled && "opacity-50 cursor-not-allowed", className)}>
       <input
         id={id}
         type="checkbox"

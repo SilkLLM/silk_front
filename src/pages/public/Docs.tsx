@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 import {
   Copy, CheckCircle, BookOpen, Key, Zap, Layers, Code2, AlertTriangle,
   ArrowLeft, ArrowRight, ChevronDown, Coins, Gift, Image as ImageIcon,
-  MessageSquare, Search, Wallet,
+  MessageSquare, Search, Wallet, ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
@@ -68,6 +68,171 @@ console.log(\`Cost: $\${response.cost_usd} | Balance: $\${response.balance_after
   -H "Authorization: Bearer silk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{"messages":[{"role":"user","content":"Hello!"}],"model":"gpt-4o"}'`,
+
+  pyKeyControls: `# Every control is optional. A key with none of them behaves
+# exactly as keys always have.
+key = client.create_key(
+    "CI pipeline",
+    spend_limit_usd=5.0,        # stops at $5 of spend
+    alert_at_percent=80,        # warn me at $4
+    allowed_models=["gpt-4o-mini"],
+    rate_limit_per_min=30,      # a runaway loop is slowed, not funded
+    budget_pool_id=team["id"],  # also draws on a shared team budget
+)
+
+# Taking a control off needs its own flag: an omitted field means
+# "leave this as it is".
+client.update_key(key.id, clear_rate_limit=True)`,
+
+  jsKeyControls: `// Every control is optional. A key with none of them behaves
+// exactly as keys always have.
+const key = await client.createKey({
+  name: "CI pipeline",
+  spendLimitUsd: 5.0,        // stops at $5 of spend
+  alertAtPercent: 80,        // warn me at $4
+  allowedModels: ["gpt-4o-mini"],
+  rateLimitPerMin: 30,       // a runaway loop is slowed, not funded
+  budgetPoolId: team.id,     // also draws on a shared team budget
+});
+
+// Taking a control off needs its own flag: an omitted field means
+// "leave this as it is".
+await client.updateKey(key.id, { clearRateLimit: true });`,
+
+  pyBudgets: `# One ceiling for a whole team, however many keys are handed out inside it.
+team = client.create_budget("Mobile team", spend_limit_usd=200)
+
+client.create_key("Alice", budget_pool_id=team["id"])
+client.create_key("Bob", budget_pool_id=team["id"], spend_limit_usd=50)
+
+# Bob stops at $50 of his own, or sooner if the team's $200 runs out first.
+for pool in client.list_budgets():
+    print(pool["name"], pool["spent_usd"], "of", pool["spend_limit_usd"])
+
+client.reset_budget(team["id"])   # new month, same keys`,
+
+  jsBudgets: `// One ceiling for a whole team, however many keys are handed out inside it.
+const team = await client.createBudget("Mobile team", 200);
+
+await client.createKey({ name: "Alice", budgetPoolId: team.id });
+await client.createKey({ name: "Bob", budgetPoolId: team.id, spendLimitUsd: 50 });
+
+// Bob stops at $50 of his own, or sooner if the team's $200 runs out first.
+for (const pool of await client.listBudgets()) {
+  console.log(pool.name, pool.spent_usd, "of", pool.spend_limit_usd);
+}
+
+await client.resetBudget(team.id);   // new month, same keys`,
+
+  pyWebhooks: `hook = client.create_webhook(
+    "https://your-app.example.com/hooks/silkllm",
+    events=["key.threshold_reached", "key.limit_reached", "pool.limit_reached"],
+)
+print(hook["secret"])   # shown once, never again
+
+# Check the receiver before a real limit is reached. This waits for the
+# delivery and reports what your endpoint answered.
+print(client.test_webhook(hook["id"]))`,
+
+  jsWebhooks: `const hook = await client.createWebhook(
+  "https://your-app.example.com/hooks/silkllm",
+  ["key.threshold_reached", "key.limit_reached", "pool.limit_reached"],
+);
+console.log(hook.secret);   // shown once, never again
+
+// Check the receiver before a real limit is reached. This waits for the
+// delivery and reports what your endpoint answered.
+console.log(await client.testWebhook(hook.id));`,
+
+  pyVerify: `from silkllm import verify_webhook
+
+@app.post("/hooks/silkllm")
+async def receive(request):
+    body = await request.body()          # the raw bytes, not a parsed dict
+    if not verify_webhook(SECRET, body, request.headers.get("X-Silk-Signature")):
+        return Response(status_code=401)
+    event = json.loads(body)
+    if event["event"] == "key.limit_reached":
+        page_the_on_call(event["data"])`,
+
+  jsVerify: `import { verifyWebhook } from "silkllm";
+
+app.post("/hooks/silkllm", express.raw({ type: "*/*" }), async (req, res) => {
+  // The raw body. Re-serialising a parsed object changes key order and
+  // spacing, and the signature is over the exact bytes that were sent.
+  const ok = await verifyWebhook(SECRET, req.body, req.header("X-Silk-Signature"));
+  if (!ok) return res.sendStatus(401);
+
+  const event = JSON.parse(req.body.toString());
+  if (event.event === "key.limit_reached") pageTheOnCall(event.data);
+  res.sendStatus(200);
+});`,
+
+  pyLimitErrors: `from silkllm import (
+    KeyLimitExceeded, PoolLimitExceeded, KeyScopeError,
+    KeyRateLimited, InsufficientBalanceError,
+)
+
+try:
+    client.generate(messages=[{"role": "user", "content": "Hello"}])
+except KeyLimitExceeded as e:
+    # The numbers are on the exception, so nothing has to parse the message.
+    raise_limit(e.details["limit"], e.details["spent"])
+except PoolLimitExceeded as e:
+    notify_team(e.details["pool_name"])
+except KeyScopeError as e:
+    log(f"this key may not call {e.details['model']}")
+except KeyRateLimited as e:
+    sleep(e.details["retry_after"])
+except InsufficientBalanceError:
+    top_up()          # the account, not the key`,
+
+  jsLimitErrors: `import {
+  KeyLimitExceeded, PoolLimitExceeded, KeyScopeError,
+  KeyRateLimited, InsufficientBalanceError,
+} from "silkllm";
+
+try {
+  await client.generate({ messages: [{ role: "user", content: "Hello" }] });
+} catch (e) {
+  // The numbers are on the error, so nothing has to parse the message.
+  if (e instanceof KeyLimitExceeded) raiseLimit(e.details.limit, e.details.spent);
+  else if (e instanceof PoolLimitExceeded) notifyTeam(e.details.pool_name);
+  else if (e instanceof KeyScopeError) log(\`this key may not call \${e.details.model}\`);
+  else if (e instanceof KeyRateLimited) await sleep(e.details.retry_after * 1000);
+  else if (e instanceof InsufficientBalanceError) await topUp();  // the account, not the key
+  else throw e;
+}`,
+
+  pyExport: `# The whole history, for an audit or a spreadsheet.
+open("audit.csv", "wb").write(client.export_key_usage(key.id))
+open("audit.json", "wb").write(client.export_key_usage(key.id, format="json"))`,
+
+  jsExport: `// The whole history, for an audit or a spreadsheet.
+await fs.writeFile("audit.csv", await client.exportKeyUsage(key.id));
+await fs.writeFile("audit.json", await client.exportKeyUsage(key.id, "json"));`,
+
+  curlControls: `# A key restricted to one model, rate limited, on a shared budget
+curl -X POST https://silkllm-backend.169.58.53.167.nip.io/api/keys \
+  -H "Authorization: Bearer silk_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "name": "CI pipeline",
+        "spend_limit_usd": 5.0,
+        "alert_at_percent": 80,
+        "allowed_models": ["gpt-4o-mini"],
+        "rate_limit_per_min": 30
+      }'
+
+# A shared budget, then a key that draws on it
+curl -X POST https://silkllm-backend.169.58.53.167.nip.io/api/budgets \
+  -H "Authorization: Bearer silk_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Mobile team", "spend_limit_usd": 200}'
+
+# Export a key's history
+curl "https://silkllm-backend.169.58.53.167.nip.io/api/keys/KEY_ID/usage/export?format=csv" \
+  -H "Authorization: Bearer silk_your_key" -o audit.csv`,
 
   pyKeyBudget: `# Create a key that can only ever spend $5 of your balance.
 key = client.create_key("Side project", spend_limit_usd=5.00)
@@ -591,6 +756,129 @@ const SECTIONS = [
         <Callout>
           Removing a limit uses the <Pill>clear_spend_limit</Pill> flag rather than sending null,
           because an omitted field has to keep meaning "leave this as it is".
+        </Callout>
+      </>
+    ),
+  },
+  {
+    id: "key-controls", label: "Key controls", icon: <ShieldCheck size={14} />,
+    body: (
+      <>
+        <Para>
+          A spend limit answers "how much". These answer the rest: what a key may call, how fast it
+          may call it, who else shares its budget, and how you hear about any of it before a customer
+          does. Every control is optional, and a key created without them behaves exactly as keys
+          always have.
+        </Para>
+
+        <DocTable
+          headers={["Control", "What it does", "Refused with"]}
+          rows={[
+            ["spend_limit_usd", "Caps total spend on this key.", "402 key_limit_exceeded"],
+            ["alert_at_percent", "Notifies you at this share of the cap, before it bites.", "nothing, it warns"],
+            ["allowed_models", "Restricts the key to named models.", "403 key_scope_denied"],
+            ["allowed_providers", "The same, by provider.", "403 key_scope_denied"],
+            ["rate_limit_per_min", "Caps requests per minute for this key alone.", "429 key_rate_limited"],
+            ["budget_pool_id", "Draws on a shared budget as well as its own cap.", "402 pool_limit_exceeded"],
+          ]}
+        />
+
+        <H3>Setting them</H3>
+        <LangTabs python={CODE.pyKeyControls} javascript={CODE.jsKeyControls} />
+
+        <Callout>
+          Checks run in this order before any provider is contacted: rate limit, then scope, then
+          shared budget, then the key's own cap, then the account balance. So a key that is out of
+          budget costs you nothing when it is refused, and the error names the first thing that
+          actually stopped it rather than the last.
+        </Callout>
+
+        <H3>Shared budgets</H3>
+        <Para>
+          A shared budget gives a team, an environment or a customer one ceiling, however many keys
+          are handed out inside it. Each key can still carry its own cap: whichever runs out first
+          stops that key, and the error says which one it was, so nobody goes looking at the wrong
+          screen.
+        </Para>
+        <LangTabs python={CODE.pyBudgets} javascript={CODE.jsBudgets} />
+        <Callout>
+          Resetting a budget refunds nothing. That money has already left the account balance; the
+          reset clears only the counter the limit is measured against. Deleting a budget leaves its
+          keys working, falling back to their own caps.
+        </Callout>
+
+        <H3>Webhooks</H3>
+        <Para>
+          Register an https endpoint and SilkLLM will tell you when a key crosses its alert
+          threshold, when it stops, and when a shared budget runs out. Deliveries never block a
+          generation, so a slow endpoint of yours cannot slow down your own API calls.
+        </Para>
+        <LangTabs python={CODE.pyWebhooks} javascript={CODE.jsWebhooks} />
+
+        <DocTable
+          headers={["Event", "When it fires"]}
+          rows={[
+            ["key.threshold_reached", "A key passed its alert_at_percent share of its cap."],
+            ["key.limit_reached", "A key hit its cap and is now refusing requests."],
+            ["pool.threshold_reached", "A shared budget passed its alert threshold."],
+            ["pool.limit_reached", "A shared budget ran out; every key on it is blocked."],
+            ["key.revoked", "A key was revoked."],
+          ]}
+        />
+
+        <H3>Verifying a delivery</H3>
+        <Para>
+          Every request carries <Pill>X-Silk-Signature</Pill> as <Pill>sha256=&lt;hex&gt;</Pill>, an
+          HMAC-SHA256 of the exact bytes sent, keyed with the secret shown once when you created the
+          hook. Both SDKs ship a verifier that compares in constant time.
+        </Para>
+        <LangTabs python={CODE.pyVerify} javascript={CODE.jsVerify} />
+        <Callout>
+          Sign the raw body, not a re-serialised object. Parsing JSON and dumping it again changes
+          key order and spacing, and the signature is over the bytes that were actually sent. A hook
+          that fails ten deliveries in a row is switched off and shown as disabled in the dashboard,
+          so a dead URL stops costing every request a timeout.
+        </Callout>
+
+        <H3>Reacting to a limit in code</H3>
+        <Para>
+          Each limit raises its own error, carrying the API's code, the HTTP status, and the figures
+          behind the message. Branching on the type means an application can raise a limit, notify a
+          team, back off or top up without ever parsing an English sentence.
+        </Para>
+        <LangTabs python={CODE.pyLimitErrors} javascript={CODE.jsLimitErrors} />
+
+        <H3>Exporting the history for audit</H3>
+        <Para>
+          Every key keeps its own record, refused attempts included, and the whole thing can be
+          pulled out as CSV or JSON.
+        </Para>
+        <LangTabs python={CODE.pyExport} javascript={CODE.jsExport} />
+
+        <H3>From the API directly</H3>
+        <CodeBlock code={CODE.curlControls} lang="bash" />
+
+        <DocTable
+          headers={["Endpoint", "Purpose"]}
+          rows={[
+            ["POST /api/budgets", "Create a shared budget."],
+            ["GET /api/budgets", "List budgets with spend, limit and key count."],
+            ["PATCH /api/budgets/{id}", "Rename or re-limit. clear_spend_limit removes the limit."],
+            ["POST /api/budgets/{id}/reset", "Zero the counter, keep the keys."],
+            ["DELETE /api/budgets/{id}", "Delete. Keys fall back to their own caps."],
+            ["POST /api/webhooks", "Register an https endpoint. Returns the secret once."],
+            ["GET /api/webhooks", "List hooks with the outcome of the last delivery."],
+            ["GET /api/webhooks/events", "The event names you can subscribe to."],
+            ["POST /api/webhooks/{id}/test", "Send a signed test delivery, report the answer."],
+            ["DELETE /api/webhooks/{id}", "Remove a hook and discard its secret."],
+            ["GET /api/keys/{id}/usage/export", "Full history as CSV or JSON."],
+          ]}
+        />
+
+        <Callout>
+          Unknown fields on these bodies are rejected with <Pill>422</Pill> rather than ignored.
+          A mistyped limit field used to produce a budget with no limit at all, which is the worst
+          possible reading of "I set a budget".
         </Callout>
       </>
     ),

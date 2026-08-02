@@ -15,8 +15,8 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle, Check, Eye, EyeOff, History, Key, Pencil, Plus, RotateCcw,
-  Terminal, Trash2, Wallet,
+  AlertTriangle, Check, Download, Eye, EyeOff, Gauge, History, Key, Pencil, Plus,
+  RotateCcw, ShieldCheck, Terminal, Trash2, Wallet,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
@@ -24,10 +24,13 @@ import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { keysApi } from "@/services/api";
 import {
-  Badge, Button, Callout, Checkbox, ConfirmDialog, CopyButton, EmptyState, Field,
-  IconButton, Input, Meter, Modal, PageHeader, Pagination, Panel, SegmentedControl,
-  Skeleton, StatTile,
+  Badge, Button, Callout, ConfirmDialog, CopyButton, EmptyState, Field,
+  IconButton, Input, Menu, MenuItem, Meter, Modal, PageHeader, Pagination, Panel,
+  SegmentedControl, Skeleton, StatTile,
 } from "@/components/ui";
+import KeyControls, {
+  ControlsState, EMPTY_CONTROLS, controlsError, controlsFromKey, toCreateBody, toUpdateBody,
+} from "@/components/KeyControls";
 import { compact, usdPrecise } from "@/lib/charts";
 
 const STORAGE_KEY = "silk_stored_keys";
@@ -45,6 +48,11 @@ interface ApiKey {
   remaining_usd: number | null;
   is_exhausted: boolean;
   limit_reset_at: string | null;
+  alert_at_percent: number | null;
+  allowed_models: string[] | null;
+  allowed_providers: string[] | null;
+  rate_limit_per_min: number | null;
+  budget_pool_id: string | null;
 }
 
 function getStoredKeys(): StoredKey[] {
@@ -222,8 +230,7 @@ function UsageDialog({ keyRow, onClose }: { keyRow: ApiKey | null; onClose: () =
 export default function ApiKeys() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
-  const [capEnabled, setCapEnabled] = useState(false);
-  const [cap, setCap] = useState("10");
+  const [controls, setControls] = useState<ControlsState>(EMPTY_CONTROLS);
   const [created, setCreated] = useState<{ key: string; name: string; limit: number | null } | null>(null);
   const [confirming, setConfirming] = useState<ApiKey | null>(null);
   const [editing, setEditing] = useState<ApiKey | null>(null);
@@ -240,14 +247,13 @@ export default function ApiKeys() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["api-keys"] });
 
   const create = useMutation({
-    mutationFn: () => keysApi.create(name.trim(), capEnabled ? Number(cap) : undefined).then((r) => r.data),
+    mutationFn: () => keysApi.create(name.trim(), toCreateBody(controls)).then((r) => r.data),
     onSuccess: (data) => {
       setCreated({ key: data.key, name: data.name, limit: data.spend_limit_usd });
       storeKey({ id: data.id, name: data.name, rawKey: data.key, createdAt: Date.now() });
       setStored(getStoredKeys());
       setName("");
-      setCapEnabled(false);
-      setCap("10");
+      setControls(EMPTY_CONTROLS);
       invalidate();
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || "Could not create the key."),
@@ -276,6 +282,16 @@ export default function ApiKeys() {
     onError: () => toast.error("Could not revoke the key."),
   });
 
+  /** Exports go through the API client so the request carries the auth header. */
+  const exportUsage = async (k: ApiKey, format: "csv" | "json") => {
+    try {
+      await keysApi.exportUsage(k.id, format);
+    } catch {
+      toast.error("Could not export the history.");
+    }
+  };
+
+  const createError = controlsError(controls);
   const list = keys || [];
   const active = list.filter((k) => k.is_active);
   const capped = active.filter((k) => k.spend_limit_usd != null);
@@ -323,12 +339,12 @@ export default function ApiKeys() {
               placeholder="Name this key, e.g. Production, CI, Side project"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) create.mutate(); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && !createError) create.mutate(); }}
               className="flex-1"
             />
             <Button
               variant="primary"
-              disabled={!name.trim() || (capEnabled && !(Number(cap) > 0))}
+              disabled={!name.trim() || !!createError}
               loading={create.isPending}
               onClick={() => create.mutate()}
               icon={<Key size={15} />}
@@ -337,28 +353,9 @@ export default function ApiKeys() {
             </Button>
           </div>
 
-          <div className="rounded-xl border border-line bg-sunken p-4">
-            <Checkbox
-              checked={capEnabled}
-              onChange={setCapEnabled}
-              label="Cap what this key can spend"
-              hint="The key stops working once it reaches this much spend. Leave off for a key that can use the whole balance."
-            />
-            {capEnabled && (
-              <div className="mt-4 pl-6 max-w-xs">
-                <Field label="Spend limit (USD)" hint="You can raise, lower or remove this at any time.">
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-ink-3">$</span>
-                    <Input
-                      type="number" min="0.01" step="0.01" className="pl-7 num"
-                      value={cap}
-                      onChange={(e) => setCap(e.target.value)}
-                    />
-                  </div>
-                </Field>
-              </div>
-            )}
-          </div>
+          <KeyControls value={controls} onChange={setControls} />
+
+          {createError && <p className="text-xs text-danger">{createError}</p>}
         </div>
       </Panel>
 
@@ -400,6 +397,17 @@ export default function ApiKeys() {
                         {k.spend_limit_usd != null && (
                           <Badge tone="brand">${k.spend_limit_usd.toFixed(2)} cap</Badge>
                         )}
+                        {k.allowed_models?.length ? (
+                          <Badge tone="neutral" icon={<ShieldCheck size={10} />}>
+                            {k.allowed_models.length} model{k.allowed_models.length > 1 ? "s" : ""}
+                          </Badge>
+                        ) : null}
+                        {k.rate_limit_per_min != null && (
+                          <Badge tone="neutral" icon={<Gauge size={10} />}>{k.rate_limit_per_min}/min</Badge>
+                        )}
+                        {k.budget_pool_id && (
+                          <Badge tone="neutral" icon={<Wallet size={10} />}>Shared budget</Badge>
+                        )}
                       </div>
                       <p className="text-2xs text-ink-3 mt-0.5 num">
                         Created {format(new Date(k.created_at), "MMM d, yyyy")}
@@ -413,6 +421,25 @@ export default function ApiKeys() {
                       <IconButton label={`Activity for ${k.name}`} size={34} onClick={() => setViewing(k)}>
                         <History size={15} />
                       </IconButton>
+                      <Menu
+                        width={230}
+                        trigger={({ toggle }) => (
+                          <IconButton label={`Export history for ${k.name}`} size={34} onClick={toggle}>
+                            <Download size={15} />
+                          </IconButton>
+                        )}
+                      >
+                        {(close) => (
+                          <>
+                            <MenuItem icon={<Download size={14} />} onClick={() => { close(); exportUsage(k, "csv"); }}>
+                              Download history as CSV
+                            </MenuItem>
+                            <MenuItem icon={<Download size={14} />} onClick={() => { close(); exportUsage(k, "json"); }}>
+                              Download history as JSON
+                            </MenuItem>
+                          </>
+                        )}
+                      </Menu>
                       {k.is_active && (
                         <>
                           <IconButton label={`Edit ${k.name}`} size={34} onClick={() => setEditing(k)}>
@@ -514,7 +541,7 @@ export default function ApiKeys() {
   );
 }
 
-/** Rename a key, and set, change or remove its cap. */
+/** Rename a key, and change or remove any of its limits. */
 function EditDialog({ keyRow, onClose, onSave, saving }: {
   keyRow: ApiKey | null;
   onClose: () => void;
@@ -522,39 +549,32 @@ function EditDialog({ keyRow, onClose, onSave, saving }: {
   saving: boolean;
 }) {
   const [name, setName] = useState("");
-  const [capEnabled, setCapEnabled] = useState(false);
-  const [cap, setCap] = useState("10");
+  const [controls, setControls] = useState<ControlsState>(EMPTY_CONTROLS);
 
   useEffect(() => {
     if (!keyRow) return;
     setName(keyRow.name);
-    setCapEnabled(keyRow.spend_limit_usd != null);
-    setCap(keyRow.spend_limit_usd != null ? String(keyRow.spend_limit_usd) : "10");
+    setControls(controlsFromKey(keyRow));
   }, [keyRow]);
 
-  const capValid = !capEnabled || Number(cap) > 0;
-  const wouldStillBeExhausted =
-    capEnabled && keyRow ? Number(cap) <= keyRow.spent_usd : false;
+  const error = controlsError(controls);
 
   return (
     <Modal
       open={!!keyRow}
       onClose={onClose}
       title={`Edit "${keyRow?.name || ""}"`}
+      description="Limits take effect on the next request. Turning one off removes it entirely."
       icon={<Pencil size={17} />}
+      size="lg"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"
             loading={saving}
-            disabled={!name.trim() || !capValid}
-            onClick={() => onSave({
-              name: name.trim(),
-              // Removing a cap is an explicit flag: a JSON null cannot be told
-              // apart from an omitted field on the server.
-              ...(capEnabled ? { spend_limit_usd: Number(cap) } : { clear_spend_limit: true }),
-            })}
+            disabled={!name.trim() || !!error}
+            onClick={() => onSave({ name: name.trim(), ...toUpdateBody(controls) })}
           >
             Save changes
           </Button>
@@ -566,38 +586,9 @@ function EditDialog({ keyRow, onClose, onSave, saving }: {
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
 
-        <div className="rounded-xl border border-line bg-sunken p-4">
-          <Checkbox
-            checked={capEnabled}
-            onChange={setCapEnabled}
-            label="Cap what this key can spend"
-            hint="Turn this off to let the key use the whole account balance."
-          />
-          {capEnabled && (
-            <div className="mt-4 pl-6 max-w-xs">
-              <Field
-                label="Spend limit (USD)"
-                hint={keyRow ? `Already spent: ${usdPrecise(keyRow.spent_usd)}` : undefined}
-              >
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-ink-3">$</span>
-                  <Input
-                    type="number" min="0.01" step="0.01" className="pl-7 num"
-                    value={cap}
-                    onChange={(e) => setCap(e.target.value)}
-                  />
-                </div>
-              </Field>
-            </div>
-          )}
-        </div>
+        <KeyControls value={controls} onChange={setControls} spentUsd={keyRow?.spent_usd} />
 
-        {wouldStillBeExhausted && (
-          <Callout tone="warning" icon={<AlertTriangle size={15} />}>
-            This key has already spent {usdPrecise(keyRow!.spent_usd)}, so a cap of ${Number(cap).toFixed(2)}
-            {" "}leaves it blocked. Set a higher cap, or reset its counter to start the budget again.
-          </Callout>
-        )}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     </Modal>
   );
