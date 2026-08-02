@@ -16,8 +16,8 @@
 import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Gauge, Layers, ShieldCheck, Wallet } from "lucide-react";
-import { budgetsApi, modelsApi } from "@/services/api";
-import { Callout, Checkbox, Field, Input, Select } from "@/components/ui";
+import { budgetsApi, keysApi, modelsApi } from "@/services/api";
+import { Button, Callout, Checkbox, Field, Input, Select } from "@/components/ui";
 import { usdPrecise } from "@/lib/charts";
 
 /** Everything the two dialogs keep in state. Strings, because they come from inputs. */
@@ -103,11 +103,55 @@ export function controlsError(s: ControlsState): string | null {
   return null;
 }
 
-export default function KeyControls({ value, onChange, spentUsd }: {
+/**
+ * Why a limit cannot be saved, on allocation grounds, or null.
+ *
+ * Kept apart from controlsError because it needs a figure fetched from the
+ * server. The dialog inside the control block offers the two ways out; this is
+ * what stops the form being submitted while neither has been taken.
+ */
+export function allocationError(
+  s: ControlsState, available: number, spentUsd = 0,
+): string | null {
+  // A key inside a shared budget spends money the budget already reserved, so
+  // its own cap is a sub-limit rather than a fresh claim on the balance.
+  if (!s.capEnabled || s.poolId) return null;
+  const asked = Math.max(0, Number(s.cap) - spentUsd);
+  if (asked > available + 1e-9) {
+    return "That is more credit than you have left to allocate.";
+  }
+  return null;
+}
+
+/**
+ * How much credit a new limit may claim, given what is already promised.
+ *
+ * `alreadyPromised` is what the thing being edited currently lays claim to, so
+ * raising a cap from $5 to $8 is measured as asking for $3 rather than $8.
+ */
+export function useAllocation(alreadyPromised = 0) {
+  const { data } = useQuery({
+    queryKey: ["key-allocation"],
+    queryFn: () => keysApi.allocation().then((r) => r.data),
+    staleTime: 15_000,
+  });
+  const balance = data?.balance ?? 0;
+  const available = (data?.available ?? 0) + Math.max(0, alreadyPromised);
+  return { balance, allocated: data?.allocated ?? 0, available, loaded: !!data };
+}
+
+/** Trim float noise so a cap set from the balance is a clean number. */
+function round6(n: number): number {
+  return Math.floor(n * 1e6) / 1e6;
+}
+
+export default function KeyControls({ value, onChange, spentUsd, alreadyPromised = 0 }: {
   value: ControlsState;
   onChange: (next: ControlsState) => void;
   /** Shown next to the cap, so it is obvious when a new cap is already used up. */
   spentUsd?: number;
+  /** What this key already claims, so an edit is not counted against itself. */
+  alreadyPromised?: number;
 }) {
   const set = <K extends keyof ControlsState>(k: K, v: ControlsState[K]) =>
     onChange({ ...value, [k]: v });
@@ -136,6 +180,15 @@ export default function KeyControls({ value, onChange, spentUsd }: {
     }
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [modelList]);
+
+  const { balance, available, loaded } = useAllocation(alreadyPromised);
+
+  // A key inside a shared budget draws on money that budget already set aside,
+  // so its own cap claims nothing further and is not measured against the
+  // balance. The server applies the same rule.
+  const claimsOwnCredit = value.capEnabled && !value.poolId;
+  const asked = Math.max(0, Number(value.cap) - (spentUsd ?? 0));
+  const overAllocated = loaded && claimsOwnCredit && asked > available + 1e-9;
 
   const capUsedUp =
     value.capEnabled && spentUsd != null && Number(value.cap) <= spentUsd;
@@ -192,6 +245,36 @@ export default function KeyControls({ value, onChange, spentUsd }: {
                   </div>
                 </Field>
               </div>
+            )}
+
+            {loaded && claimsOwnCredit && !overAllocated && (
+              <p className="text-2xs text-ink-3 num">
+                {usdPrecise(available)} of your {usdPrecise(balance)} balance is still
+                free to allocate.
+              </p>
+            )}
+
+            {overAllocated && (
+              <Callout tone="warning" icon={<AlertTriangle size={15} />}>
+                <p>
+                  You do not have {usdPrecise(Number(value.cap))} to give this key. Only{" "}
+                  <span className="num font-medium text-ink">{usdPrecise(available)}</span> of your{" "}
+                  <span className="num">{usdPrecise(balance)}</span> balance is unallocated, the rest
+                  is already set aside for other keys and budgets.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => set("cap", String(round6(available + (spentUsd ?? 0))))}
+                  >
+                    Use my maximum ({usdPrecise(available)})
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => set("capEnabled", false)}>
+                    No limit, spend from my balance
+                  </Button>
+                </div>
+              </Callout>
             )}
 
             {capUsedUp && (

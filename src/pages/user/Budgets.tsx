@@ -26,6 +26,7 @@ import {
   IconButton, Input, Meter, Modal, PageHeader, Panel, Skeleton, StatTile,
 } from "@/components/ui";
 import { usdPrecise } from "@/lib/charts";
+import { useAllocation } from "@/components/KeyControls";
 
 interface Pool {
   id: string;
@@ -94,7 +95,10 @@ export default function Budgets() {
     staleTime: 10 * 60_000,
   });
 
-  const refreshPools = () => qc.invalidateQueries({ queryKey: ["budget-pools"] });
+  const refreshPools = () => {
+    qc.invalidateQueries({ queryKey: ["budget-pools"] });
+    qc.invalidateQueries({ queryKey: ["key-allocation"] });
+  };
   const refreshHooks = () => qc.invalidateQueries({ queryKey: ["webhooks"] });
   const fail = (fallback: string) => (e: any) =>
     toast.error(e?.response?.data?.error?.message || e?.response?.data?.detail || fallback);
@@ -159,6 +163,12 @@ export default function Budgets() {
   const atLimit = poolList.filter((p) => p.spend_limit_usd != null && p.spent_usd >= p.spend_limit_usd);
   const failingHooks = hookList.filter((h) => h.consecutive_failures > 0);
 
+  // A shared budget reserves part of the one account balance, exactly as a key
+  // cap does, so the two compete for the same credit and the same guard applies.
+  const { balance, available, loaded } = useAllocation();
+  const poolAsked = poolCapped ? Number(poolLimit) : 0;
+  const poolOverAllocated = loaded && poolCapped && poolAsked > available + 1e-9;
+
   const urlLooksValid = /^https:\/\/.+/.test(hookUrl.trim());
   const canCreateHook = urlLooksValid && hookEvents.length > 0;
 
@@ -209,7 +219,7 @@ export default function Budgets() {
             <Button
               variant="primary"
               icon={<Users size={15} />}
-              disabled={!poolName.trim() || (poolCapped && !(Number(poolLimit) > 0))}
+              disabled={!poolName.trim() || (poolCapped && !(Number(poolLimit) > 0)) || poolOverAllocated}
               loading={createPool.isPending}
               onClick={() => createPool.mutate()}
             >
@@ -236,6 +246,38 @@ export default function Budgets() {
                     />
                   </div>
                 </Field>
+
+                {loaded && !poolOverAllocated && (
+                  <p className="text-2xs text-ink-3 num mt-2">
+                    {usdPrecise(available)} of your {usdPrecise(balance)} balance is still
+                    free to allocate.
+                  </p>
+                )}
+
+                {poolOverAllocated && (
+                  <div className="mt-3">
+                    <Callout tone="warning" icon={<AlertTriangle size={15} />}>
+                      <p>
+                        You do not have {usdPrecise(poolAsked)} to give this budget. Only{" "}
+                        <span className="num font-medium text-ink">{usdPrecise(available)}</span> of
+                        your <span className="num">{usdPrecise(balance)}</span> balance is
+                        unallocated, the rest is already set aside for other keys and budgets.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => setPoolLimit(String(Math.floor(available * 1e6) / 1e6))}
+                        >
+                          Use my maximum ({usdPrecise(available)})
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setPoolCapped(false)}>
+                          No limit, just group the keys
+                        </Button>
+                      </div>
+                    </Callout>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -94,6 +94,7 @@ const FIXTURES = {
     status: "active", created_at: new Date().toISOString(), last_used: new Date().toISOString(),
     earned_credits_total: 3.21, requests_served: 1234, provider_cost_served: 4.3,
   })),
+  "/keys/allocation": { balance: 100, allocated: 42.5, available: 57.5 },
   "/budgets": Array.from({ length: 4 }, (_, i) => ({
     id: `pool${i}`, name: "Mobile platform team, Europe and North America",
     spend_limit_usd: i === 3 ? null : 100 + i * 50, spent_usd: i === 1 ? 250 : 42.5,

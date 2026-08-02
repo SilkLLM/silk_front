@@ -56,7 +56,7 @@ const KEY_SHAPES = {
   empty: [],
 };
 
-async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200, budgets = POOL_SHAPES.full, hooks = HOOK_SHAPES.healthy } = {}) {
+async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200, budgets = POOL_SHAPES.full, hooks = HOOK_SHAPES.healthy, allocationSnapshot = { balance: 100, allocated: 0, available: 100 } } = {}) {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -113,6 +113,10 @@ async function newPage(browser, { keys = KEY_SHAPES.full, usageStatus = 200, bud
         return json({ detail: [{ loc: ["query", "page_size"], msg: "less than or equal to 100" }] }, 422);
       }
       return json({ total: 0, entries: [] });
+    }
+    if (p === "/api/keys/allocation") return json(allocationSnapshot);
+    if (/^\/api\/keys\/[^/]+\/permanent$/.test(p) && req.method() === "DELETE") {
+      return req.respond({ status: 204, body: "" });
     }
     if (p === "/api/budgets" && req.method() === "POST") {
       return json({ id: "p-new", name: "Team", spend_limit_usd: 25, spent_usd: 0,
@@ -314,6 +318,76 @@ for (const [shape, hooks] of Object.entries(HOOK_SHAPES)) {
     document.body.innerText.includes("Choose at least one model"));
   record("an empty model allowlist blocks creation with a reason", blocked);
   record("toggling every control raises no page error", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── A cap above what is unallocated must be caught, and offer a way out ─────
+{
+  const { page, errors } = await newPage(browser, {
+    keys: KEY_SHAPES.empty,
+    allocationSnapshot: { balance: 10, allocated: 8, available: 2 },
+  });
+  await page.goto(`${BASE}/dashboard/keys`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.type('input[placeholder^="Name this key"]', "Over budget");
+  await page.evaluate(() => document.querySelectorAll("input[type=checkbox]")[0]?.click());
+  await new Promise((r) => setTimeout(r, 250));
+  // The default cap is $10, against $2 available.
+  const warned = await page.evaluate(() => document.body.innerText.includes("You do not have"));
+  const blocked = await page.evaluate(() =>
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Create key"))?.disabled === true);
+  record("a cap above the unallocated balance is refused in the UI", warned && blocked,
+         `warned=${warned} blocked=${blocked}`);
+
+  // "Use my maximum" must drop it to exactly what is free, and unblock the form.
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Use my maximum"))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  const nowAllowed = await page.evaluate(() =>
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Create key"))?.disabled === false);
+  record("\"use my maximum\" sets an allocatable cap", nowAllowed);
+  record("the allocation dialog raises no page error", errors.length === 0, errors[0] || "");
+  await page.close();
+}
+
+// ── Declining the limit entirely also unblocks ──────────────────────────────
+{
+  const { page } = await newPage(browser, {
+    keys: KEY_SHAPES.empty,
+    allocationSnapshot: { balance: 10, allocated: 10, available: 0 },
+  });
+  await page.goto(`${BASE}/dashboard/keys`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.type('input[placeholder^="Name this key"]', "No limit please");
+  await page.evaluate(() => document.querySelectorAll("input[type=checkbox]")[0]?.click());
+  await new Promise((r) => setTimeout(r, 250));
+  await page.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("No limit"))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  const allowed = await page.evaluate(() =>
+    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Create key"))?.disabled === false);
+  record("declining the limit lets the key be created uncapped", allowed);
+  await page.close();
+}
+
+// ── A revoked key offers a permanent delete ─────────────────────────────────
+{
+  const revoked = [{ ...KEY_SHAPES.full[0], id: "revoked1", name: "Old key", is_active: false }];
+  const { page, errors } = await newPage(browser, { keys: revoked });
+  await page.goto(`${BASE}/dashboard/keys`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  const hasDelete = await page.evaluate(() =>
+    !!document.querySelector('button[aria-label^="Delete"][aria-label*="permanently"]'));
+  record("a revoked key offers a permanent delete", hasDelete);
+
+  await page.evaluate(() =>
+    document.querySelector('button[aria-label*="permanently"]')?.click());
+  await new Promise((r) => setTimeout(r, 500));
+  const confirms = await page.evaluate(() => document.body.innerText.includes("for good"));
+  record("deleting asks for confirmation first", confirms);
+  record("the delete flow raises no page error", errors.length === 0, errors[0] || "");
   await page.close();
 }
 

@@ -29,7 +29,8 @@ import {
   SegmentedControl, Skeleton, StatTile,
 } from "@/components/ui";
 import KeyControls, {
-  ControlsState, EMPTY_CONTROLS, controlsError, controlsFromKey, toCreateBody, toUpdateBody,
+  ControlsState, EMPTY_CONTROLS, allocationError, controlsError, controlsFromKey,
+  toCreateBody, toUpdateBody, useAllocation,
 } from "@/components/KeyControls";
 import { compact, usdPrecise } from "@/lib/charts";
 
@@ -233,6 +234,7 @@ export default function ApiKeys() {
   const [controls, setControls] = useState<ControlsState>(EMPTY_CONTROLS);
   const [created, setCreated] = useState<{ key: string; name: string; limit: number | null } | null>(null);
   const [confirming, setConfirming] = useState<ApiKey | null>(null);
+  const [deleting, setDeleting] = useState<ApiKey | null>(null);
   const [editing, setEditing] = useState<ApiKey | null>(null);
   const [viewing, setViewing] = useState<ApiKey | null>(null);
   const [stored, setStored] = useState<StoredKey[]>([]);
@@ -255,13 +257,19 @@ export default function ApiKeys() {
       setName("");
       setControls(EMPTY_CONTROLS);
       invalidate();
+      qc.invalidateQueries({ queryKey: ["key-allocation"] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || "Could not create the key."),
   });
 
   const update = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => keysApi.update(id, data),
-    onSuccess: () => { toast.success("Key updated."); setEditing(null); invalidate(); },
+    onSuccess: () => {
+      toast.success("Key updated.");
+      setEditing(null);
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["key-allocation"] });
+    },
     onError: (e: any) => toast.error(e?.response?.data?.detail || "Could not update the key."),
   });
 
@@ -271,13 +279,29 @@ export default function ApiKeys() {
     onError: () => toast.error("Could not reset the counter."),
   });
 
+  const remove = useMutation({
+    mutationFn: (id: string) => keysApi.deletePermanently(id),
+    onSuccess: (_d, id) => {
+      toast.success("Key deleted, along with its activity log.");
+      removeStoredKey(id);
+      setStored(getStoredKeys());
+      setDeleting(null);
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["key-allocation"] });
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.error?.message || e?.response?.data?.detail
+        || "Could not delete the key."),
+  });
+
   const revoke = useMutation({
     mutationFn: (id: string) => keysApi.revoke(id),
     onSuccess: (_d, id) => {
-      toast.success("Key revoked.");
+      toast.success("Key revoked. Delete it to remove its history too.");
       removeStoredKey(id);
       setStored(getStoredKeys());
       invalidate();
+      qc.invalidateQueries({ queryKey: ["key-allocation"] });
     },
     onError: () => toast.error("Could not revoke the key."),
   });
@@ -291,7 +315,8 @@ export default function ApiKeys() {
     }
   };
 
-  const createError = controlsError(controls);
+  const { available } = useAllocation();
+  const createError = controlsError(controls) || allocationError(controls, available);
   const list = keys || [];
   const active = list.filter((k) => k.is_active);
   const capped = active.filter((k) => k.spend_limit_usd != null);
@@ -440,6 +465,16 @@ export default function ApiKeys() {
                           </>
                         )}
                       </Menu>
+                      {!k.is_active && (
+                        <IconButton
+                          label={`Delete ${k.name} permanently`}
+                          size={34}
+                          tone="danger"
+                          onClick={() => setDeleting(k)}
+                        >
+                          <Trash2 size={15} />
+                        </IconButton>
+                      )}
                       {k.is_active && (
                         <>
                           <IconButton label={`Edit ${k.name}`} size={34} onClick={() => setEditing(k)}>
@@ -537,6 +572,16 @@ export default function ApiKeys() {
         confirmLabel="Revoke key"
         pending={revoke.isPending}
       />
+
+      <ConfirmDialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && remove.mutate(deleting.id)}
+        title={`Delete "${deleting?.name}" for good?`}
+        body="This removes the key and its entire activity log. Your account ledger is untouched, so your spending records stay complete. This cannot be undone."
+        confirmLabel="Delete permanently"
+        pending={remove.isPending}
+      />
     </DashboardLayout>
   );
 }
@@ -557,7 +602,16 @@ function EditDialog({ keyRow, onClose, onSave, saving }: {
     setControls(controlsFromKey(keyRow));
   }, [keyRow]);
 
-  const error = controlsError(controls);
+  // What this key already lays claim to, so raising its cap is measured as the
+  // difference rather than the whole new figure.
+  const alreadyPromised =
+    keyRow && keyRow.spend_limit_usd != null && !keyRow.budget_pool_id
+      ? Math.max(0, keyRow.spend_limit_usd - (keyRow.spent_usd || 0))
+      : 0;
+  const { available } = useAllocation(alreadyPromised);
+
+  const error =
+    controlsError(controls) || allocationError(controls, available, keyRow?.spent_usd ?? 0);
 
   return (
     <Modal
@@ -586,7 +640,12 @@ function EditDialog({ keyRow, onClose, onSave, saving }: {
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
 
-        <KeyControls value={controls} onChange={setControls} spentUsd={keyRow?.spent_usd} />
+        <KeyControls
+          value={controls}
+          onChange={setControls}
+          spentUsd={keyRow?.spent_usd}
+          alreadyPromised={alreadyPromised}
+        />
 
         {error && <p className="text-xs text-danger">{error}</p>}
       </div>

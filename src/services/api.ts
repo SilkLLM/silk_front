@@ -143,6 +143,23 @@ export const keysApi = {
   update: (id: string, data: KeyUpdate) =>
     api.patch(`/keys/${id}`, data).then((r) => ({ ...r, data: normaliseKey(r.data) })),
   revoke: (id: string) => api.delete(`/keys/${id}`),
+  /**
+   * Delete a revoked key and its activity log for good.
+   *
+   * Separate from revoke on purpose: revoking stops the key but keeps the
+   * history, and only a key that is already stopped can have that history
+   * destroyed. The account ledger is untouched either way.
+   */
+  deletePermanently: (id: string) => api.delete(`/keys/${id}/permanent`),
+  /** Balance, how much of it is already promised to limits, and what is left. */
+  allocation: () => api.get("/keys/allocation").then((r) => ({
+    ...r,
+    data: {
+      balance: Number(r.data?.balance ?? 0),
+      allocated: Number(r.data?.allocated ?? 0),
+      available: Number(r.data?.available ?? 0),
+    },
+  })),
   /** Per-key request history, newest first. Includes refused attempts. */
   usage: (id: string, page = 1, pageSize = 50, status?: string) =>
     api.get(`/keys/${id}/usage`, { params: { page, page_size: pageSize, status } }),

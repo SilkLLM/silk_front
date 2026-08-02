@@ -69,6 +69,24 @@ console.log(\`Cost: $\${response.cost_usd} | Balance: $\${response.balance_after
   -H "Content-Type: application/json" \\
   -d '{"messages":[{"role":"user","content":"Hello!"}],"model":"gpt-4o"}'`,
 
+  pyAllocation: `free = client.allocation()
+print(free["balance"], free["allocated"], free["available"])
+
+# Ask for no more than is actually there.
+client.create_key("CI", spend_limit_usd=min(5.0, free["available"]))`,
+
+  jsAllocation: `const free = await client.allocation();
+console.log(free.balance, free.allocated, free.available);
+
+// Ask for no more than is actually there.
+await client.createKey({ name: "CI", spendLimitUsd: Math.min(5, free.available) });`,
+
+  pyDeleteKey: `client.revoke_key(key.id)   # stops working, still listed, history kept
+client.delete_key(key.id)   # gone, with its activity log`,
+
+  jsDeleteKey: `await client.revokeKey(key.id);   // stops working, still listed, history kept
+await client.deleteKey(key.id);   // gone, with its activity log`,
+
   pyKeyControls: `# Every control is optional. A key with none of them behaves
 # exactly as keys always have.
 key = client.create_key(
@@ -676,11 +694,29 @@ const SECTIONS = [
         </Para>
 
         <Callout>
-          A limit is a ceiling on the shared account balance, not a separate wallet. Three keys
-          limited to $10 do not reserve $30 between them; they each simply stop once they have spent
-          $10. Keys with no limit set can use the whole balance, which is how every key behaved
-          before this existed.
+          A limit <em>allocates</em> part of the one account balance to one key. The allocations
+          compete: their unspent parts cannot add up to more than your balance, so SilkLLM will not
+          let you promise a key credit you do not have. Three keys limited to $10 need $30 of
+          balance between them, and the attempt to set the third is refused with{" "}
+          <Pill>400 allocation_exceeds_balance</Pill>.
         </Callout>
+
+        <Callout>
+          The money is not moved or held in escrow. Each key simply stops at its own figure, and the
+          account balance is enforced independently underneath: settlement locks the account row and
+          refuses to go below zero. So even a limit set while the account was funded cannot overdraw
+          it once the account is empty. Keys with no limit reserve nothing and can use whatever is
+          left, which is how every key behaved before this existed.
+        </Callout>
+
+        <H3>Knowing what you can allocate</H3>
+        <Para>
+          <Pill>GET /api/keys/allocation</Pill> reports your balance, how much of it existing limits
+          already promise, and what is left. The dashboard shows the same figure under any limit
+          field, and offers to set the limit to your maximum, or to drop it entirely, the moment you
+          ask for more than you have.
+        </Para>
+        <LangTabs python={CODE.pyAllocation} javascript={CODE.jsAllocation} />
 
         <H3>Setting a limit</H3>
         <Para>
@@ -732,6 +768,20 @@ const SECTIONS = [
           ]}
         />
 
+        <H3>Revoking and deleting</H3>
+        <Para>
+          Revoking stops a key immediately but keeps it listed with its history, because a key that
+          stopped and left no trace cannot be investigated. When the trace is no longer wanted,
+          delete it. Only a revoked key can be deleted, so one misclick never destroys the audit
+          trail of a key that is still serving traffic.
+        </Para>
+        <LangTabs python={CODE.pyDeleteKey} javascript={CODE.jsDeleteKey} />
+        <Callout>
+          Your account ledger is untouched either way. That is the record of money that actually
+          moved, it belongs to the account rather than to any one key, and deleting a key must not
+          put a hole in your books.
+        </Callout>
+
         <H3>Resetting the counter</H3>
         <Para>
           Resetting zeroes the counter the limit is measured against, giving the key its full budget
@@ -751,6 +801,8 @@ const SECTIONS = [
             ["DELETE /api/keys/{id}", "Revoke. History is kept for audit."],
             ["GET /api/keys/{id}/usage", "Paginated history. Filter with status, page, page_size."],
             ["POST /api/keys/{id}/reset", "Zero the counter, keep the history."],
+            ["DELETE /api/keys/{id}/permanent", "Delete a revoked key and its history for good."],
+            ["GET /api/keys/allocation", "Balance, what limits already promise, and what is left."],
           ]}
         />
         <Callout>
