@@ -79,10 +79,38 @@
     <link rel="apple-touch-startup-image" href="/splash/ipad-pro-12-landscape.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" />
 
     <!-- Fonts: Inter + JetBrains Mono load via globals.css; Satoshi (display) via Fontshare -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Fonts must never block the first paint.
+
+      This was a plain stylesheet link to a third-party origin that takes about
+      3.7 seconds to answer, and a render-blocking stylesheet means the browser
+      shows nothing at all until it arrives. Loading it as print media and
+      promoting it on load takes it off the critical path entirely: text appears
+      immediately in the fallback face and swaps to Satoshi when it lands.
+
+      The two fonts.googleapis.com preconnects that used to be here were removed:
+      nothing is ever loaded from that origin, and opening a connection to it
+      cost a DNS lookup measured at over five seconds.
+    -->
     <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
-    <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500&display=swap" rel="stylesheet" />
+    <link
+      rel="stylesheet"
+      href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500&display=swap"
+      media="print"
+      onload="this.media='all'; this.onload=null;"
+    />
+    <noscript>
+      <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500&display=swap" />
+    </noscript>
+
+    <!--
+      Open the connection to the API while the page is still parsing. Every
+      dashboard view needs it immediately, and DNS, TCP and TLS to that origin
+      were measured at close to two seconds combined, all of which would
+      otherwise be paid after the app has mounted and asked for data.
+    -->
+    <link rel="preconnect" href="https://silkllm-backend.169.58.53.167.nip.io" crossorigin />
+    <link rel="dns-prefetch" href="https://silkllm-backend.169.58.53.167.nip.io" />
 
     <!--
       Apply the stored theme before first paint. Without this the page renders in
@@ -107,7 +135,51 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!--
+        The first thing anyone sees, and it costs no requests.
+
+        The root used to be empty, so after waiting seconds for the HTML the
+        visitor got a white screen for several more while the bundle downloaded
+        and executed. Painting a branded frame from markup that has already
+        arrived turns that dead time into something that looks like it is
+        working. React replaces the whole subtree on mount, so nothing here
+        needs tearing down.
+
+        Styles are inline for the same reason: an external stylesheet is another
+        round trip, and this has to be paintable from the bytes already in hand.
+      -->
+      <div id="silk-boot" style="
+        position:fixed; inset:0; display:flex; align-items:center;
+        justify-content:center; flex-direction:column; gap:18px;
+        background:#F6F5F2; color:#1A1918;
+        font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;">
+        <div style="display:flex; align-items:center; gap:11px;">
+          <img src="/logo-mark.png" alt="" width="34" height="34"
+               style="border-radius:9px; display:block;" />
+          <span style="font-size:19px; font-weight:600; letter-spacing:-0.02em;">SilkLLM</span>
+        </div>
+        <div style="width:132px; height:3px; border-radius:99px;
+                    background:rgba(26,25,24,0.10); overflow:hidden;">
+          <div style="width:40%; height:100%; border-radius:99px; background:#D29A2D;
+                      animation:silk-boot-slide 1.15s ease-in-out infinite;"></div>
+        </div>
+      </div>
+      <style>
+        @keyframes silk-boot-slide {
+          0%   { transform:translateX(-100%); }
+          100% { transform:translateX(330%); }
+        }
+        /* Match whichever theme the visitor last chose, so the boot frame does
+           not flash light before a dark app loads. The class is set by the
+           inline theme script that already runs in the head. */
+        html.dark #silk-boot { background:#0D0F10; color:#F2F0EC; }
+        html.dark #silk-boot div > div { background:rgba(242,240,236,0.12); }
+        @media (prefers-reduced-motion: reduce) {
+          #silk-boot [style*="silk-boot-slide"] { animation:none; width:100%; }
+        }
+      </style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

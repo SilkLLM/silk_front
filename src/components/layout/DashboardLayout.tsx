@@ -20,6 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { notificationsApi, trialApi } from "@/services/api";
+import { prefetchPath } from "@/lib/prefetch";
 import PaymentReminderModal from "@/components/PaymentReminderModal";
 import CommandPalette from "@/components/CommandPalette";
 import Logo from "@/components/Logo";
@@ -99,6 +100,13 @@ function NavList({ items, collapsed, onNavigate }: {
           to={item.href}
           end={item.end}
           onClick={onNavigate}
+          // Start fetching the page the moment a pointer lands on the link.
+          // There is usually a few hundred milliseconds between hovering and
+          // clicking, which is enough to have the bundle in hand by the time it
+          // is needed. onFocus covers keyboard navigation, which otherwise gets
+          // none of the benefit.
+          onPointerEnter={() => prefetchPath(item.href)}
+          onFocus={() => prefetchPath(item.href)}
           title={collapsed ? item.label : undefined}
           className={({ isActive }) => clsx(
             "relative flex items-center gap-3 rounded-lg text-sm font-medium transition-colors",

@@ -27,8 +27,10 @@ export default defineConfig({
       output: {
         // Code-split the heavy 3D canvas so it doesn't block first paint
         manualChunks: {
-          "three-vendor": ["three", "@react-three/fiber", "@react-three/drei"],
           "react-vendor":  ["react", "react-dom", "react-router-dom"],
+          // Recharts is the single heaviest dependency, and only a handful of
+          // views draw a chart. Kept in its own chunk so it is fetched when one
+          // of them is opened rather than as part of every first visit.
           "chart-vendor":  ["recharts"],
         },
       },

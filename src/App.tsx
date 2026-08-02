@@ -8,9 +8,10 @@
 // File: silkllm-frontend/src/App.tsx
 
 import React, { Suspense, lazy, useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
+import { prefetchArea } from "@/lib/prefetch";
 import { AuthContext, useAuthState } from "@/hooks/useAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
@@ -156,6 +157,25 @@ function AppRoutes() {
  * It clears itself: any successful response anywhere in the app fires
  * `silk:service-up`, and the screen polls /health on its own besides.
  */
+/**
+ * Warm the bundles for pages this visitor is likely to open next.
+ *
+ * Runs after mount and only during idle time, so it never competes with the
+ * page currently being loaded. Without it, every page is a fresh round trip the
+ * first time it is opened, which on a slow link reads as the app being slow
+ * rather than the network being slow.
+ */
+function RoutePrefetcher() {
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    prefetchArea(pathname.startsWith("/dashboard") || user ? "dashboard" : "public");
+  }, [pathname, user]);
+
+  return null;
+}
+
 function ServiceGate({ children }: { children: React.ReactNode }) {
   const [down, setDown] = useState(false);
 
@@ -185,6 +205,7 @@ export default function App() {
       <AuthContext.Provider value={authState}>
         <BrowserRouter>
           <ServiceGate>
+            <RoutePrefetcher />
             <AppRoutes />
           </ServiceGate>
           <ThemedToaster />
