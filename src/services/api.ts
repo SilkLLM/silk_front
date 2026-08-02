@@ -59,18 +59,43 @@ export const authApi = {
   githubLogin: () => { window.location.href = `${BASE_URL}/auth/github/login`; },
 };
 
+/**
+ * Fill in the spend-cap fields on an API key.
+ *
+ * Not every response carries them: the create endpoint answers with a smaller
+ * shape, and a backend that has not yet run the spend-cap migration omits them
+ * entirely. Normalising here means the UI only ever sees a complete key, rather
+ * than every call site having to guard, and `=== null` checks silently letting
+ * `undefined` through. That exact gap crashed the keys page in production.
+ */
+function normaliseKey(k: any) {
+  const limit = k?.spend_limit_usd ?? null;
+  const spent = Number(k?.spent_usd ?? 0);
+  return {
+    ...k,
+    spend_limit_usd: limit === null ? null : Number(limit),
+    spent_usd: Number.isFinite(spent) ? spent : 0,
+    remaining_usd: k?.remaining_usd ?? (limit === null ? null : Math.max(0, Number(limit) - spent)),
+    is_exhausted: k?.is_exhausted ?? (limit !== null && spent >= Number(limit)),
+    is_active: k?.is_active ?? true,
+    last_used: k?.last_used ?? null,
+    limit_reset_at: k?.limit_reset_at ?? null,
+  };
+}
+
 export const keysApi = {
-  list: () => api.get("/keys"),
+  list: () => api.get("/keys").then((r) => ({ ...r, data: (r.data || []).map(normaliseKey) })),
   /** `spendLimitUsd` caps how much of your balance this key may draw. Omit for no cap. */
   create: (name: string, spendLimitUsd?: number) =>
-    api.post("/keys", { name, spend_limit_usd: spendLimitUsd ?? null }),
+    api.post("/keys", { name, spend_limit_usd: spendLimitUsd ?? null })
+      .then((r) => ({ ...r, data: normaliseKey(r.data) })),
   /** Rename, change the cap, or disable. Pass clear_spend_limit to remove a cap. */
   update: (id: string, data: {
     name?: string;
     spend_limit_usd?: number;
     clear_spend_limit?: boolean;
     is_active?: boolean;
-  }) => api.patch(`/keys/${id}`, data),
+  }) => api.patch(`/keys/${id}`, data).then((r) => ({ ...r, data: normaliseKey(r.data) })),
   revoke: (id: string) => api.delete(`/keys/${id}`),
   /** Per-key request history, newest first. Includes refused attempts. */
   usage: (id: string, page = 1, pageSize = 50, status?: string) =>

@@ -28,6 +28,10 @@ import {
 } from "@/components/ui";
 import { ChartTooltip, compact, usd, usdPrecise, useChartTheme } from "@/lib/charts";
 
+// The overview charts a window of recent activity. 100 is the server's maximum
+// page size; asking for more is a 422, which is what broke this page.
+const USAGE_WINDOW = 100;
+
 interface Model {
   id: string;
   display_name: string;
@@ -429,7 +433,7 @@ export default function UserDashboard() {
 
   const { data: usageData } = useQuery({
     queryKey: ["usage-overview"],
-    queryFn: () => usageApi.list(1, 200, "usage").then((r) => r.data),
+    queryFn: () => usageApi.list(1, USAGE_WINDOW, "usage").then((r) => r.data),
   });
   const { data: modelsData, isLoading: modelsLoading } = useQuery({
     queryKey: ["available-models"],
@@ -508,7 +512,7 @@ export default function UserDashboard() {
           value={(apiKeys || []).filter((k) => k.is_active).length}
           icon={<Key size={14} />}
           hint={(() => {
-            const capped = (apiKeys || []).filter((k) => k.is_active && k.spend_limit_usd !== null).length;
+            const capped = (apiKeys || []).filter((k) => k.is_active && k.spend_limit_usd != null).length;
             return capped ? `${capped} with a spend cap` : "None capped";
           })()}
         />

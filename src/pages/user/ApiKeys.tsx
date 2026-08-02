@@ -76,7 +76,7 @@ function SecretReveal({ value }: { value: string }) {
 
 /** How much of its cap a key has used. Uncapped keys show spend without a bar. */
 function SpendState({ k }: { k: ApiKey }) {
-  if (k.spend_limit_usd === null) {
+  if (k.spend_limit_usd == null) {
     return (
       <p className="text-2xs text-ink-3 num mt-1">
         {usdPrecise(k.spent_usd)} spent, no cap
@@ -278,7 +278,7 @@ export default function ApiKeys() {
 
   const list = keys || [];
   const active = list.filter((k) => k.is_active);
-  const capped = active.filter((k) => k.spend_limit_usd !== null);
+  const capped = active.filter((k) => k.spend_limit_usd != null);
   const exhausted = active.filter((k) => k.is_exhausted);
   const totalSpent = list.reduce((s, k) => s + (k.spent_usd || 0), 0);
 
@@ -397,7 +397,7 @@ export default function ApiKeys() {
                           : k.is_exhausted
                             ? <Badge tone="warning">At limit</Badge>
                             : <Badge tone="success"><Check size={10} /> Active</Badge>}
-                        {k.spend_limit_usd !== null && (
+                        {k.spend_limit_usd != null && (
                           <Badge tone="brand">${k.spend_limit_usd.toFixed(2)} cap</Badge>
                         )}
                       </div>
@@ -418,7 +418,7 @@ export default function ApiKeys() {
                           <IconButton label={`Edit ${k.name}`} size={34} onClick={() => setEditing(k)}>
                             <Pencil size={15} />
                           </IconButton>
-                          {k.spend_limit_usd !== null && (
+                          {k.spend_limit_usd != null && (
                             <IconButton
                               label={`Reset the counter on ${k.name}`}
                               size={34}
@@ -477,7 +477,7 @@ export default function ApiKeys() {
               <p className="text-xs font-medium text-ink-2 mb-1.5">Secret</p>
               <SecretReveal value={created.key} />
             </div>
-            {created.limit !== null && (
+            {created.limit != null && (
               <p className="text-xs text-ink-2">
                 Capped at <span className="num font-medium text-ink">${created.limit.toFixed(2)}</span>.
                 It will stop working once it has spent that much.
@@ -528,8 +528,8 @@ function EditDialog({ keyRow, onClose, onSave, saving }: {
   useEffect(() => {
     if (!keyRow) return;
     setName(keyRow.name);
-    setCapEnabled(keyRow.spend_limit_usd !== null);
-    setCap(keyRow.spend_limit_usd !== null ? String(keyRow.spend_limit_usd) : "10");
+    setCapEnabled(keyRow.spend_limit_usd != null);
+    setCap(keyRow.spend_limit_usd != null ? String(keyRow.spend_limit_usd) : "10");
   }, [keyRow]);
 
   const capValid = !capEnabled || Number(cap) > 0;
