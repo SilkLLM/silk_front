@@ -32,7 +32,7 @@ import KeyControls, {
   ControlsState, EMPTY_CONTROLS, allocationError, controlsError, controlsFromKey,
   toCreateBody, toUpdateBody, useAllocation,
 } from "@/components/KeyControls";
-import { compact, usdPrecise } from "@/lib/charts";
+import { compact, usd, usdPrecise } from "@/lib/charts";
 
 const STORAGE_KEY = "silk_stored_keys";
 
@@ -98,7 +98,7 @@ function SpendState({ k }: { k: ApiKey }) {
     <div className="mt-2 max-w-xs">
       <Meter value={pct} tone={tone} size="sm" />
       <p className="text-2xs text-ink-3 num mt-1.5">
-        {usdPrecise(k.spent_usd)} of ${k.spend_limit_usd.toFixed(2)} used
+        {usdPrecise(k.spent_usd)} of {usd(k.spend_limit_usd)} used
         {!k.is_exhausted && k.remaining_usd !== null && `, ${usdPrecise(k.remaining_usd)} left`}
       </p>
     </div>
@@ -420,7 +420,7 @@ export default function ApiKeys() {
                             ? <Badge tone="warning">At limit</Badge>
                             : <Badge tone="success"><Check size={10} /> Active</Badge>}
                         {k.spend_limit_usd != null && (
-                          <Badge tone="brand">${k.spend_limit_usd.toFixed(2)} cap</Badge>
+                          <Badge tone="brand">{usd(k.spend_limit_usd)} cap</Badge>
                         )}
                         {k.allowed_models?.length ? (
                           <Badge tone="neutral" icon={<ShieldCheck size={10} />}>
@@ -541,7 +541,7 @@ export default function ApiKeys() {
             </div>
             {created.limit != null && (
               <p className="text-xs text-ink-2">
-                Capped at <span className="num font-medium text-ink">${created.limit.toFixed(2)}</span>.
+                Capped at <span className="num font-medium text-ink">{usd(created.limit)}</span>.
                 It will stop working once it has spent that much.
               </p>
             )}

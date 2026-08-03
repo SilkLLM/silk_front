@@ -73,7 +73,7 @@ function BalanceHero({ spent7d }: { spent7d: number }) {
             <Wallet size={14} className="text-ink-3" /> Credit balance
           </p>
           <p className="text-[2.75rem] sm:text-5xl leading-none font-semibold tracking-tight text-ink mt-3">
-            ${balance.toFixed(4)}
+            {usd(balance)}
           </p>
           <div className="flex items-center gap-3 mt-3 flex-wrap">
             {low
@@ -126,7 +126,7 @@ function TrialBanner() {
               <Badge tone="brand">{trial.days_remaining} days left</Badge>
             </p>
             <p className="text-xs text-ink-2 mt-1 num">
-              ${remaining.toFixed(4)} of ${limit.toFixed(2)} free usage left today
+              {usd(remaining)} of {usd(limit)} free usage left today
             </p>
           </div>
         </div>
@@ -253,7 +253,7 @@ function SpendChart({ entries, range, onRange }: {
               <YAxis
                 {...t.axisProps}
                 width={62}
-                tickFormatter={(v: number) => (v >= 0.01 ? `$${v.toFixed(2)}` : `$${v.toFixed(4)}`)}
+                tickFormatter={(v: number) => (v >= 0.01 ? `${usd(v)}` : `${usd(v)}`)}
               />
               <Tooltip
                 cursor={{ stroke: t.axis, strokeWidth: 1 }}
@@ -404,8 +404,8 @@ function ModelCatalogue({ models, loading }: { models?: Model[]; loading: boolea
                                 </div>
                                 <p className="text-2xs text-ink-3 font-mono mt-0.5 truncate max-w-[240px]">{m.id}</p>
                               </td>
-                              <td className="text-right num text-ink-2 text-xs">${m.input_cost_per_1k_usd.toFixed(6)}</td>
-                              <td className="text-right num text-ink-2 text-xs">${m.output_cost_per_1k_usd.toFixed(6)}</td>
+                              <td className="text-right num text-ink-2 text-xs">{usd(m.input_cost_per_1k_usd)}</td>
+                              <td className="text-right num text-ink-2 text-xs">{usd(m.output_cost_per_1k_usd)}</td>
                               <td className="text-right num text-ink-2 text-xs">
                                 {m.context_window ? m.context_window.toLocaleString() : "n/a"}
                               </td>

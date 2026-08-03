@@ -21,7 +21,7 @@ import {
   Badge, Button, EmptyState, Field, Input, PageHeader, Pagination, Panel,
   SearchInput, Select, Skeleton, StatTile, Tabs, Toolbar,
 } from "@/components/ui";
-import { ChartTooltip, compact, usdPrecise, usdShort, useChartTheme } from "@/lib/charts";
+import { ChartTooltip, compact, usd, usdPrecise, usdShort, useChartTheme } from "@/lib/charts";
 
 type Tab = "users" | "ledger" | "refund";
 
@@ -207,7 +207,7 @@ export default function AdminCredits() {
                           </div>
                         </td>
                         <td><Badge tone={u.role === "user" ? "neutral" : "brand"}>{u.role}</Badge></td>
-                        <td className="text-right num text-sm text-ink font-medium">${u.balance.toFixed(4)}</td>
+                        <td className="text-right num text-sm text-ink font-medium">{usd(u.balance)}</td>
                         <td><Badge tone={u.is_active ? "success" : "error"}>{u.is_active ? "Active" : "Suspended"}</Badge></td>
                         <td className="text-right num text-xs text-ink-2">{format(new Date(u.created_at), "MMM d, yyyy")}</td>
                         <td>
@@ -264,9 +264,9 @@ export default function AdminCredits() {
                       <td className="text-xs text-ink-2 max-w-[200px] truncate">{e.user_email || "-"}</td>
                       <td><Badge tone="neutral">{e.entry_type}</Badge></td>
                       <td className={`text-right num text-xs font-medium ${e.amount < 0 ? "text-ink" : "text-success"}`}>
-                        {e.amount < 0 ? "-" : "+"}${Math.abs(e.amount).toFixed(6)}
+                        {e.amount < 0 ? "-" : "+"}{usd(Math.abs(e.amount))}
                       </td>
-                      <td className="text-right num text-xs text-ink-2">${e.balance_after.toFixed(4)}</td>
+                      <td className="text-right num text-xs text-ink-2">{usd(e.balance_after)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -288,7 +288,7 @@ export default function AdminCredits() {
               <Select value={refund.user_id} onChange={(e) => setRefund((f) => ({ ...f, user_id: e.target.value }))}>
                 <option value="">Select a user...</option>
                 {all.map((u: any) => (
-                  <option key={u.id} value={u.id}>{u.email} - ${u.balance.toFixed(2)}</option>
+                  <option key={u.id} value={u.id}>{u.email} - {usd(u.balance)}</option>
                 ))}
               </Select>
             </Field>
@@ -297,13 +297,13 @@ export default function AdminCredits() {
               <div className="rounded-xl border border-line bg-sunken px-4 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm text-ink truncate">{selectedUser.name || selectedUser.email}</p>
-                  <p className="text-2xs text-ink-3 num mt-0.5">Current balance ${selectedUser.balance.toFixed(4)}</p>
+                  <p className="text-2xs text-ink-3 num mt-0.5">Current balance {usd(selectedUser.balance)}</p>
                 </div>
                 {parseFloat(refund.amount_usd) > 0 && (
                   <div className="text-right shrink-0">
                     <p className="text-2xs text-ink-3">After refund</p>
                     <p className="text-sm font-medium text-success num">
-                      ${(selectedUser.balance + parseFloat(refund.amount_usd)).toFixed(4)}
+                      {usd((selectedUser.balance + parseFloat(refund.amount_usd)))}
                     </p>
                   </div>
                 )}

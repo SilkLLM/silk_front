@@ -25,7 +25,7 @@ import {
   Badge, Button, Callout, Checkbox, ConfirmDialog, CopyButton, EmptyState, Field,
   IconButton, Input, Meter, Modal, PageHeader, Panel, Skeleton, StatTile,
 } from "@/components/ui";
-import { usdPrecise } from "@/lib/charts";
+import { usd, usdPrecise } from "@/lib/charts";
 import { useAllocation } from "@/components/KeyControls";
 
 interface Pool {
@@ -61,7 +61,7 @@ function PoolState({ p }: { p: Pool }) {
     <div className="mt-2 max-w-xs">
       <Meter value={pct} tone={spent ? "danger" : pct >= 80 ? "warn" : "accent"} size="sm" />
       <p className="text-2xs text-ink-3 num mt-1.5">
-        {usdPrecise(p.spent_usd)} of ${p.spend_limit_usd.toFixed(2)} used
+        {usdPrecise(p.spent_usd)} of {usd(p.spend_limit_usd)} used
         {!spent && `, ${usdPrecise(p.spend_limit_usd - p.spent_usd)} left`}
       </p>
     </div>

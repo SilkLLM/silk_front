@@ -23,7 +23,7 @@ import {
   Badge, Button, Callout, Checkbox, ConfirmDialog, EmptyState, Field, IconButton,
   Input, Meter, Modal, PageHeader, Panel, Select, Skeleton, StatTile, ToggleField,
 } from "@/components/ui";
-import { compact, usdPrecise } from "@/lib/charts";
+import { compact, usd, usdPrecise } from "@/lib/charts";
 
 interface ProviderKey {
   id: string; provider_id: string; label: string;
@@ -201,7 +201,7 @@ export default function ProviderHub() {
                     <div>
                       <dt className="text-2xs text-ink-3 uppercase tracking-wide">Budget</dt>
                       <dd className="text-sm font-medium text-ink num mt-0.5">
-                        {budget ? `$${k.declared_budget_usd.toFixed(2)}` : "Uncapped"}
+                        {budget ? `${usd(k.declared_budget_usd)}` : "Uncapped"}
                       </dd>
                     </div>
                   </dl>

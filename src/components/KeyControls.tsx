@@ -18,7 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Gauge, Layers, ShieldCheck, Wallet } from "lucide-react";
 import { budgetsApi, keysApi, modelsApi } from "@/services/api";
 import { Button, Callout, Checkbox, Field, Input, Select } from "@/components/ui";
-import { usdPrecise } from "@/lib/charts";
+import { usd, usdPrecise } from "@/lib/charts";
 
 /** Everything the two dialogs keep in state. Strings, because they come from inputs. */
 export interface ControlsState {
@@ -368,7 +368,7 @@ export default function KeyControls({ value, onChange, spentUsd, alreadyPromised
               <option key={p.id} value={p.id}>
                 {p.name}
                 {p.spend_limit_usd != null
-                  ? ` (${usdPrecise(p.spent_usd || 0)} of $${Number(p.spend_limit_usd).toFixed(2)})`
+                  ? ` (${usdPrecise(p.spent_usd || 0)} of ${usd(Number(p.spend_limit_usd))})`
                   : " (no limit)"}
               </option>
             ))}

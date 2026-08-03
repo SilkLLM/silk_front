@@ -21,7 +21,7 @@ import {
   Badge, Button, Callout, ConfirmDialog, Field, IconButton, Input, Meter, Modal,
   PageHeader, Panel, Skeleton, StatTile, Switch,
 } from "@/components/ui";
-import { usdShort } from "@/lib/charts";
+import { usd, usdShort } from "@/lib/charts";
 
 const EMPTY = { id: "", name: "", api_key: "", alert_threshold_percent: 20 };
 
@@ -188,8 +188,8 @@ export default function AdminProviders() {
                     <div>
                       <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
                         <span className="text-sm text-ink num">
-                          <span className="font-medium">${p.last_known_balance.toFixed(2)}</span>
-                          <span className="text-ink-3"> of ${p.last_topup_amount.toFixed(2)} remaining</span>
+                          <span className="font-medium">{usd(p.last_known_balance)}</span>
+                          <span className="text-ink-3"> of {usd(p.last_topup_amount)} remaining</span>
                         </span>
                         <span className="text-xs text-ink-2 num">{pct!.toFixed(1)}%</span>
                       </div>

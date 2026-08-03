@@ -20,6 +20,7 @@ import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { billingApi, usageApi } from "@/services/api";
 import { useAuth } from "@/hooks/useAuth";
+import { usd } from "@/lib/money";
 import {
   Badge, Button, Callout, EmptyState, Field, Input, PageHeader, Panel, Skeleton,
 } from "@/components/ui";
@@ -115,7 +116,7 @@ export default function Billing() {
               <Wallet size={14} className="text-ink-3" /> Current balance
             </p>
             <p className="text-[2.5rem] sm:text-[2.75rem] leading-none font-semibold tracking-tight text-ink mt-3">
-              ${(user?.balance ?? 0).toFixed(4)}
+              {usd((user?.balance ?? 0))}
             </p>
             <p className="text-xs text-ink-3 mt-2">USD · shared across all providers · never expires</p>
           </div>
@@ -184,7 +185,7 @@ export default function Billing() {
             <div className="rounded-xl border border-line bg-sunken px-4 py-3.5 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-ink-2">Credits added</span>
-                <span className="text-ink font-medium num">${amount.toFixed(2)}</span>
+                <span className="text-ink font-medium num">{usd(amount)}</span>
               </div>
               {rail === "paystack" && (
                 <>
@@ -206,7 +207,7 @@ export default function Billing() {
               {rail === "stripe" && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-ink-2">You pay</span>
-                  <span className="text-ink font-medium num">${amount.toFixed(2)}</span>
+                  <span className="text-ink font-medium num">{usd(amount)}</span>
                 </div>
               )}
             </div>
@@ -248,7 +249,7 @@ export default function Billing() {
                       {format(new Date(e.created_at), "MMM d, yyyy · HH:mm")}
                     </p>
                   </div>
-                  <span className="text-sm font-medium text-success num shrink-0">+${e.amount.toFixed(2)}</span>
+                  <span className="text-sm font-medium text-success num shrink-0">+{usd(e.amount)}</span>
                 </li>
               ))}
             </ul>

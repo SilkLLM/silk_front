@@ -119,28 +119,11 @@ export function ChartLegend({ items }: { items: { label: string; color: string }
 }
 
 // ── Number formatting ──────────────────────────────────────────────────────
-// Money in this product spans six orders of magnitude (a $0.000004 request and a
-// $500 top-up), so there is no single format. These are the three that matter.
+// Re-exported from lib/money so the sixty-odd call sites that import these from
+// here keep working, while the rule itself lives in exactly one place. Printing
+// per-request costs at six decimals is what pushed money out of its card on
+// several pages; the rule is now capped at four and bounded at both ends.
 
-/** Full precision, for per-request costs. */
-export const usdPrecise = (n: number) => `$${(n || 0).toFixed(6)}`;
-/** Account-level precision, for balances. */
-export const usd = (n: number) => `$${(n || 0).toFixed(4)}`;
-/** Human money, for purchases and totals. */
-export const usdShort = (n: number) => {
-  const v = n || 0;
-  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
-  if (Math.abs(v) >= 1) return `$${v.toFixed(2)}`;
-  if (v === 0) return "$0";
-  return `$${v.toFixed(4)}`;
-};
-/** Compact counts for stat tiles: 1,284 / 12.9K / 3.4M. */
-export const compact = (n: number) => {
-  const v = n || 0;
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 10_000) return `${(v / 1_000).toFixed(1)}K`;
-  return v.toLocaleString();
-};
+export { usd, usdPrecise, usdShort, compact, percent } from "@/lib/money";
 
 // EOF silkllm-frontend/src/lib/charts.tsx

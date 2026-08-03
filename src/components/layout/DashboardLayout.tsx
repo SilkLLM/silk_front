@@ -33,6 +33,7 @@ import {
   PanelLeftClose, PanelLeftOpen, X, ChevronsUpDown, Wallet, BookOpen,
 } from "lucide-react";
 import clsx from "clsx";
+import { usd } from "@/lib/money";
 
 interface NavItem { label: string; href: string; icon: React.ReactNode; end?: boolean }
 
@@ -177,7 +178,7 @@ function TrialCard({ collapsed }: { collapsed: boolean }) {
       </div>
       <Meter value={pct} tone={tone as any} size="sm" />
       <p className="text-2xs text-ink-3 mt-1.5 num">
-        ${remaining.toFixed(4)} of ${limit.toFixed(2)} left today
+        {usd(remaining)} of {usd(limit)} left today
       </p>
     </Link>
   );
@@ -209,7 +210,7 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
             <>
               <span className="flex-1 min-w-0 text-left">
                 <span className="block text-xs font-medium text-ink truncate">{user?.name}</span>
-                <span className="block text-2xs text-ink-3 truncate num">${(user?.balance ?? 0).toFixed(4)}</span>
+                <span className="block text-2xs text-ink-3 truncate num">{usd((user?.balance ?? 0))}</span>
               </span>
               <ChevronsUpDown size={14} className="text-ink-3 shrink-0" />
             </>
@@ -319,7 +320,7 @@ function BalancePill() {
       )}
     >
       <Wallet size={14} className="shrink-0" />
-      <span className="num">${(user?.balance ?? 0).toFixed(4)}</span>
+      <span className="num">{usd((user?.balance ?? 0))}</span>
       <span className="w-px h-4 bg-current opacity-20" />
       <PlusCircle size={14} className="shrink-0" />
     </Link>

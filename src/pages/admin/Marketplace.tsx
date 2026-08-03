@@ -24,7 +24,7 @@ import {
   Badge, EmptyState, IconButton, Meter, PageHeader, Panel, SearchInput, Select,
   Skeleton, StatTile, Toolbar,
 } from "@/components/ui";
-import { ChartTooltip, compact, usdPrecise, usdShort, useChartTheme } from "@/lib/charts";
+import { ChartTooltip, compact, usd, usdPrecise, usdShort, useChartTheme } from "@/lib/charts";
 
 export default function Marketplace() {
   const qc = useQueryClient();
@@ -250,7 +250,7 @@ export default function Marketplace() {
                   <tr key={o.owner_id}>
                     <td className="text-sm text-ink max-w-[200px] truncate">{o.owner_email}</td>
                     <td className="text-right num text-xs text-ink-2">{o.keys}</td>
-                    <td className="text-right num text-xs text-ink-2">${o.declared_budget_usd.toFixed(2)}</td>
+                    <td className="text-right num text-xs text-ink-2">{usd(o.declared_budget_usd)}</td>
                     <td className="text-right num text-xs text-ink-2">{usdPrecise(o.delivered_usd)}</td>
                     <td className="min-w-[140px]">
                       <div className="flex items-center gap-2">

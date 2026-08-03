@@ -21,7 +21,7 @@ import {
   Badge, Button, EmptyState, PageHeader, Pagination, Panel, SegmentedControl,
   Skeleton, StatTile, Toolbar,
 } from "@/components/ui";
-import { ChartTooltip, compact, usdPrecise, useChartTheme } from "@/lib/charts";
+import { ChartTooltip, compact, usd, usdPrecise, useChartTheme } from "@/lib/charts";
 
 const PAGE_SIZE = 20;
 
@@ -130,7 +130,7 @@ export default function Usage() {
                 </defs>
                 <CartesianGrid {...t.gridProps} />
                 <XAxis dataKey="i" {...t.axisProps} minTickGap={20} />
-                <YAxis {...t.axisProps} width={64} tickFormatter={(v: number) => `$${v.toFixed(4)}`} />
+                <YAxis {...t.axisProps} width={64} tickFormatter={(v: number) => `${usd(v)}`} />
                 <Tooltip
                   cursor={{ stroke: t.axis, strokeWidth: 1 }}
                   content={
@@ -215,9 +215,9 @@ export default function Usage() {
                         {tokens !== null ? tokens.toLocaleString() : "-"}
                       </td>
                       <td className={`text-right num text-xs font-medium ${debit ? "text-ink" : "text-success"}`}>
-                        {debit ? "-" : "+"}${Math.abs(e.amount).toFixed(6)}
+                        {debit ? "-" : "+"}{usd(Math.abs(e.amount))}
                       </td>
-                      <td className="text-right num text-ink-2 text-xs">${e.balance_after.toFixed(4)}</td>
+                      <td className="text-right num text-ink-2 text-xs">{usd(e.balance_after)}</td>
                     </tr>
                   );
                 })}

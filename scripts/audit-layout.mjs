@@ -60,7 +60,7 @@ const LEDGER = Array.from({ length: 20 }, (_, i) => ({
   entry_type: ["usage", "purchase", "refund"][i % 3],
   model: MODELS[i % MODELS.length].id,
   amount: i % 3 === 1 ? 25 : -0.00123 * (i + 1),
-  balance_after: 42.1234 - i * 0.01,
+  balance_after: 987654.321987 - i * 0.01,
   prompt_tokens: 1200 + i * 37,
   completion_tokens: 800 + i * 11,
   user_email: LONG_EMAIL,
@@ -98,7 +98,7 @@ const FIXTURES = {
     id: "r1", promotion_name: "Launch week, extended for early customers",
     description: "20% off our fees", discount_percent: 20,
     redeemed_at: new Date().toISOString(), expires_at: new Date().toISOString(),
-    is_active: true, uses_count: 1284, fee_saved_usd: 12.3456,
+    is_active: true, uses_count: 1284, fee_saved_usd: 0.0000004,
     applies_to_models: null, applies_to_providers: null,
     summary: "20% off the SilkLLM fee until 30 Jun 2026. Your credit balance and the provider's cost are unchanged; only our margin is discounted.",
   },
@@ -107,7 +107,7 @@ const FIXTURES = {
     description: "20% off our fees", discount_percent: 20 + i * 10,
     redeemed_at: new Date().toISOString(),
     expires_at: i === 2 ? null : new Date().toISOString(),
-    is_active: i !== 2, uses_count: 1284, fee_saved_usd: 12.3456,
+    is_active: i !== 2, uses_count: 1284, fee_saved_usd: 0.0000004,
     applies_to_models: i === 1 ? ["gpt-4o-mini"] : null, applies_to_providers: null,
     summary: "20% off the SilkLLM fee until 30 Jun 2026. Your credit balance and the provider's cost are unchanged; only our margin is discounted.",
   })),
@@ -129,7 +129,7 @@ const FIXTURES = {
     allowed_models: i === 2 ? ["gpt-4o-mini", "gpt-4o"] : null, allowed_providers: null,
     is_active: i !== 4, created_at: new Date().toISOString(),
     unavailable_reason: i === 4 ? "This promotion is no longer available." : null,
-    total_fee_saved_usd: 123.45, total_uses: 987,
+    total_fee_saved_usd: 987654.321987, total_uses: 987,
   })),
   "/keys/allocation": { balance: 100, allocated: 42.5, available: 57.5 },
   "/budgets": Array.from({ length: 4 }, (_, i) => ({
@@ -155,7 +155,7 @@ const FIXTURES = {
   })),
   "/admin/models": MODELS,
   "/admin/topups": Array.from({ length: 5 }, (_, i) => ({
-    id: `t${i}`, provider_id: "openai", amount: 500, remaining_after: 480,
+    id: `t${i}`, provider_id: "openai", amount: -987654.321987, remaining_after: 480,
     note: "A reasonably long note about this particular top-up transaction", created_at: new Date().toISOString(),
   })),
   "/admin/alerts": Array.from({ length: 5 }, (_, i) => ({
@@ -332,7 +332,40 @@ for (const theme of ["dark", "light"]) {
           if (tiny.length >= 5) break;
         }
 
-        return { pageOverflow, culprits, tiny, title: document.title };
+        // Money that runs past the edge of the card holding it does NOT make
+        // the document wider, so page-level overflow never caught it. This
+        // looks for the thing actually reported: an element whose content is
+        // wider than the box drawn for it.
+        //
+        // Deliberately narrow. Anything that scrolls on purpose is skipped,
+        // and so is anything that wraps, because wrapped text is contained
+        // even when it is tall. What is left is content genuinely spilling
+        // sideways out of a fixed box.
+        const spills = [];
+        for (const el of document.querySelectorAll("td, th, span, p, div")) {
+          if (spills.length >= 6) break;
+          const style = getComputedStyle(el);
+          if (style.overflowX === "auto" || style.overflowX === "scroll") continue;
+          if (el.closest(".scroll-x, [class*='overflow-x-auto']")) continue;
+          // Ellipsis and hidden overflow are containment, not spilling: their
+          // content is meant to be wider than the box and is clipped to fit.
+          // What matters is content wider than its box with overflow visible,
+          // which is what actually paints outside the card.
+          if (style.overflowX !== "visible") continue;
+          if (style.whiteSpace !== "nowrap") continue;
+          if (el.clientWidth === 0) continue;
+
+          const over = el.scrollWidth - el.clientWidth;
+          if (over > 1) {
+            spills.push({
+              tag: el.tagName.toLowerCase(),
+              over,
+              text: (el.textContent || "").trim().slice(0, 42),
+            });
+          }
+        }
+
+        return { pageOverflow, culprits, tiny, spills, title: document.title };
       }, vp.mobile);
 
       if (result.pageOverflow > 1) {
@@ -340,6 +373,12 @@ for (const theme of ["dark", "light"]) {
           theme, vp: vp.name, route, kind: "overflow",
           detail: `${result.pageOverflow}px past viewport`,
           culprits: result.culprits,
+        });
+      }
+      if (result.spills?.length) {
+        findings.push({
+          theme, vp: vp.name, route, kind: "spill",
+          detail: JSON.stringify(result.spills),
         });
       }
       if (result.tiny.length) {

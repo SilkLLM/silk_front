@@ -17,7 +17,7 @@ import { adminApi } from "@/services/api";
 import {
   Button, Callout, EmptyState, Field, Input, PageHeader, Panel, Select, Skeleton, StatTile,
 } from "@/components/ui";
-import { usdShort } from "@/lib/charts";
+import { usd, usdShort } from "@/lib/charts";
 
 const EMPTY = { provider_id: "", amount: "", remaining_after: "", note: "" };
 
@@ -148,8 +148,8 @@ export default function AdminTopups() {
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-medium text-success num">+${t.amount.toFixed(2)}</p>
-                    <p className="text-2xs text-ink-3 num mt-0.5">balance ${t.remaining_after.toFixed(2)}</p>
+                    <p className="text-sm font-medium text-success num">+{usd(t.amount)}</p>
+                    <p className="text-2xs text-ink-3 num mt-0.5">balance {usd(t.remaining_after)}</p>
                   </div>
                 </li>
               ))}

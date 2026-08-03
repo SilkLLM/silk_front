@@ -19,6 +19,7 @@ import toast from "react-hot-toast";
 import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
+import { usd } from "@/lib/money";
 import {
   Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Modal,
   PageHeader, Panel, SearchInput, Select, Skeleton, StatTile, Switch, ToggleField, Toolbar,
@@ -402,8 +403,8 @@ export default function AdminModels() {
                               </div>
                               <p className="text-2xs font-mono text-ink-3 mt-0.5 truncate max-w-[220px]">{m.id}</p>
                             </td>
-                            <td className="text-right num text-xs text-ink-2">${m.input_cost_per_1k.toFixed(6)}</td>
-                            <td className="text-right num text-xs text-ink-2">${m.output_cost_per_1k.toFixed(6)}</td>
+                            <td className="text-right num text-xs text-ink-2">{usd(m.input_cost_per_1k)}</td>
+                            <td className="text-right num text-xs text-ink-2">{usd(m.output_cost_per_1k)}</td>
                             <td className="text-right num text-xs text-ink-2">{m.routing_weight}</td>
                             <td className="text-right num text-xs text-ink-2">
                               {m.context_window ? m.context_window.toLocaleString() : "-"}
