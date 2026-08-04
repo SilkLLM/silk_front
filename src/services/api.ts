@@ -397,7 +397,15 @@ export const generateApi = {
       }
       onDone();
     } catch (err: any) {
-      onError(err.message);
+      // fetch() rejects with a bare "Failed to fetch" / "Load failed" for any
+      // network-level failure (DNS, TLS, CORS, dropped connection) - it never
+      // reaches response.ok above, so none of the status-based handling runs.
+      // The axios instance treats the equivalent case (no response at all) as
+      // an outage and shows the maintenance screen instead of a raw browser
+      // error; mirror that here rather than dumping the exception message into
+      // the chat transcript.
+      notifyServiceDown();
+      onError("SilkLLM could not be reached. Check your connection and try again.");
     }
   },
 };
