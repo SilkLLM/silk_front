@@ -30,7 +30,7 @@ import {
   LayoutDashboard, Key, CreditCard, BarChart2, MessageSquare, Coins,
   Settings, Bell, Users, Zap, PlusCircle, LogOut, Menu as MenuIcon, Store,
   SlidersHorizontal, ShieldCheck, Sun, Moon, Monitor, Gift, Search,
-  PanelLeftClose, PanelLeftOpen, X, ChevronsUpDown, Wallet, BookOpen,
+  PanelLeftClose, PanelLeftOpen, X, ChevronsUpDown, Wallet, BookOpen, Activity,
 } from "lucide-react";
 import clsx from "clsx";
 import { usd } from "@/lib/money";
@@ -52,6 +52,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Providers",   href: "/admin/providers",   icon: <Zap size={17} /> },
   { label: "Models",      href: "/admin/models",      icon: <Settings size={17} /> },
   { label: "Marketplace", href: "/admin/marketplace", icon: <Store size={17} /> },
+  { label: "Analytics",   href: "/admin/analytics",   icon: <Activity size={17} /> },
   { label: "Top-Ups",     href: "/admin/topups",      icon: <PlusCircle size={17} /> },
   { label: "Alerts",      href: "/admin/alerts",      icon: <ShieldCheck size={17} /> },
   { label: "Credits",     href: "/admin/credits",     icon: <Users size={17} /> },
@@ -73,6 +74,7 @@ const TITLES: Record<string, string> = {
   "/admin/providers": "Providers",
   "/admin/models": "Model Control",
   "/admin/marketplace": "Marketplace",
+  "/admin/analytics": "Reliability Analytics",
   "/admin/topups": "Top-Ups",
   "/admin/alerts": "Alerts",
   "/admin/credits": "Credits & Users",

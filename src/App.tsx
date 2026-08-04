@@ -37,6 +37,7 @@ const AdminTopups       = lazy(() => import("@/pages/admin/Topups"));
 const AdminAlerts       = lazy(() => import("@/pages/admin/Alerts"));
 const AdminCredits      = lazy(() => import("@/pages/admin/Credits"));
 const AdminMarketplace  = lazy(() => import("@/pages/admin/Marketplace"));
+const AdminAnalytics    = lazy(() => import("@/pages/admin/Analytics"));
 const AdminSettings     = lazy(() => import("@/pages/admin/Settings"));
 const AdminPromotions = lazy(() => import("@/pages/admin/AdminPromotions"));
 
@@ -133,6 +134,7 @@ function AppRoutes() {
         <Route path="/admin/providers"  element={<AdminRoute><AdminProviders /></AdminRoute>} />
         <Route path="/admin/models"     element={<AdminRoute><AdminModels /></AdminRoute>} />
         <Route path="/admin/marketplace" element={<AdminRoute><AdminMarketplace /></AdminRoute>} />
+        <Route path="/admin/analytics"   element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
         <Route path="/admin/topups"     element={<AdminRoute><AdminTopups /></AdminRoute>} />
         <Route path="/admin/alerts"     element={<AdminRoute><AdminAlerts /></AdminRoute>} />
         <Route path="/admin/credits"    element={<AdminRoute><AdminCredits /></AdminRoute>} />

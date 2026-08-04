@@ -603,6 +603,9 @@ export const adminApi = {
     set: (key: string, enabled: boolean, reason?: string) =>
       api.post(`/admin/killswitch/${key}`, { enabled, reason }),
   },
+  analytics: {
+    reliability: (days = 7) => api.get("/admin/analytics/reliability", { params: { days } }),
+  },
 };
 
 export default api;
