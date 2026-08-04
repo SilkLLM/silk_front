@@ -698,9 +698,18 @@ export function Modal({ open, onClose, title, description, icon, footer, size = 
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Call-sites pass onClose as an inline arrow function, so its identity
+  // changes on every parent re-render (e.g. every keystroke in a field inside
+  // the modal). Reading it through a ref - always current, but not a
+  // dependency - keeps the effect below from re-running on those renders: it
+  // was re-running its cleanup/setup each time, including panelRef.current?.
+  // focus(), which yanked focus off whatever input the admin was typing in.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -709,7 +718,7 @@ export function Modal({ open, onClose, title, description, icon, footer, size = 
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
 
