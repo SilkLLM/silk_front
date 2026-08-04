@@ -22,6 +22,7 @@ import toast from "react-hot-toast";
 import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
+import { useAuth } from "@/hooks/useAuth";
 import { modelsApi, generateApi, mediaApi } from "@/services/api";
 import {
   Button, Checkbox, EmptyState, Field, IconButton, Input, Meter, Modal, Select,
@@ -147,6 +148,7 @@ function SliderRow({ label, value, onChange }: { label: string; value: number; o
 
 export default function Chat() {
   const qc = useQueryClient();
+  const { isAdmin } = useAuth();
   const [store, setStore] = useState<ChatStore>(() => purge(loadStore()));
   const [activeId, setActiveId] = useState<string | null>(store.conversations[0]?.id || null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -174,6 +176,7 @@ export default function Chat() {
     queryFn: () => modelsApi.list().then((r) => r.data.models),
   });
   const [mode, setMode] = useState<Mode>("text");
+  const [provider, setProvider] = useState<string>("");
   const [model, setModel] = useState<string>("");
 
   const modeModels = useMemo(
@@ -185,20 +188,35 @@ export default function Chat() {
     [allModels, mode],
   );
 
+  // Picking a provider first, then a model within it, replaces one long
+  // flat list (hundreds of models across nine providers) with two short
+  // ones. The model field is the API's "provider" - it was read as
+  // "provider_id" here before, which doesn't exist on the response, so
+  // every model silently grouped into one bogus bucket.
+  const providers = useMemo(
+    () => Array.from(new Set<string>(modeModels.map((m: any) => m.provider as string))).sort(),
+    [modeModels],
+  );
+
   useEffect(() => {
-    if (modeModels.length && !modeModels.some((m: any) => m.id === model)) {
-      setModel(modeModels[0].id);
+    if (providers.length && !providers.includes(provider)) {
+      setProvider(providers[0]);
     }
-  }, [modeModels, model]);
+  }, [providers, provider]);
 
-  const modelsByProvider = useMemo(() => {
-    const g: Record<string, any[]> = {};
-    for (const m of modeModels) (g[m.provider_id] ||= []).push(m);
-    return g;
-  }, [modeModels]);
+  const providerModels = useMemo(
+    () => modeModels.filter((m: any) => m.provider === provider),
+    [modeModels, provider],
+  );
 
-  const selectedModel = useMemo(() => modeModels.find((m: any) => m.id === model), [modeModels, model]);
-  const isElevenlabs = selectedModel?.provider_id === "elevenlabs";
+  useEffect(() => {
+    if (providerModels.length && !providerModels.some((m: any) => m.id === model)) {
+      setModel(providerModels[0].id);
+    }
+  }, [providerModels, model]);
+
+  const selectedModel = useMemo(() => providerModels.find((m: any) => m.id === model), [providerModels, model]);
+  const isElevenlabs = selectedModel?.provider === "elevenlabs";
   const [voice, setVoice] = useState<string>("alloy");
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
@@ -598,20 +616,30 @@ export default function Chat() {
             </span>
 
             <Select
+              className="h-9 text-xs w-auto max-w-[100px] sm:max-w-[140px] shrink-0"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              disabled={providers.length === 0}
+              aria-label="Provider"
+            >
+              {providers.length === 0
+                ? <option value="">No {mode} providers</option>
+                : providers.map((p) => <option key={p} value={p}>{p}</option>)}
+            </Select>
+
+            <Select
               className="h-9 text-xs w-auto max-w-[160px] sm:max-w-[240px] shrink-0"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              disabled={modeModels.length === 0}
+              disabled={providerModels.length === 0}
               aria-label="Model"
             >
-              {modeModels.length === 0
-                ? <option value="">No {mode} models</option>
-                : Object.entries(modelsByProvider).map(([prov, list]) => (
-                    <optgroup key={prov} label={prov}>
-                      {(list as any[]).map((m: any) => (
-                        <option key={m.id} value={m.id}>{m.display_name}{m.is_free ? " (free)" : ""}</option>
-                      ))}
-                    </optgroup>
+              {providerModels.length === 0
+                ? <option value="">No models</option>
+                : providerModels.map((m: any) => (
+                    <option key={m.id} value={m.id}>
+                      {m.display_name}{isAdmin && m.is_free ? " (free)" : ""}
+                    </option>
                   ))}
             </Select>
 
