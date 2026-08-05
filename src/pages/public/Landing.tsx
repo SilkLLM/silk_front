@@ -60,11 +60,11 @@ const STEPS = [
 ];
 
 const PRICES = [
-  { label: "Gemini 1.5 Flash",  price: "$0.000083", color: "#4285f4" },
-  { label: "DeepSeek V3",       price: "$0.00028",  color: "#5BC4F5" },
-  { label: "Grok 3 Mini",       price: "$0.00033",  color: "#9AA0A6" },
-  { label: "Claude 3.5 Sonnet", price: "$0.0033",   color: "#D97757" },
-  { label: "GPT-4o",            price: "$0.0055",   color: "#74aa9c" },
+  { label: "Gemini 1.5 Flash",  price: "$0.000083", color: "#4285f4", provider: "Google" },
+  { label: "DeepSeek V3",       price: "$0.00028",  color: "#5BC4F5", provider: "DeepSeek" },
+  { label: "Grok 3 Mini",       price: "$0.00033",  color: "#9AA0A6", provider: "xAI" },
+  { label: "Claude 3.5 Sonnet", price: "$0.0033",   color: "#D97757", provider: "Anthropic" },
+  { label: "GPT-4o",            price: "$0.0055",   color: "#74aa9c", provider: "OpenAI" },
 ];
 
 const VOICE_FEATURES = [
@@ -326,9 +326,13 @@ function Hero() {
 // ── Provider marquee ────────────────────────────────────────────────────────
 
 /**
- * A continuous strip of provider names. The list is rendered twice and the
- * track travels exactly half its width, so the loop has no visible seam. The
- * edges fade into the page rather than stopping at a border.
+ * A continuous strip of provider names. The list is rendered four times and
+ * the track travels exactly a quarter of its width, so the loop has no
+ * visible seam - two copies looked seamless on a laptop but on a wide enough
+ * monitor a single copy is narrower than the viewport, so the track ran out
+ * of content and visibly snapped back before reaching the halfway point.
+ * Four copies keep the strip wider than any realistic viewport. The edges
+ * fade into the page rather than stopping at a border.
  */
 function Marquee() {
   return (
@@ -336,7 +340,7 @@ function Marquee() {
       <div className="rule-fade absolute top-0 inset-x-0" />
       <div className="rule-fade absolute bottom-0 inset-x-0" />
       <div className="flex gap-10 sm:gap-14 w-max animate-marquee hover:[animation-play-state:paused]">
-        {[...PROVIDERS, ...PROVIDERS].map((p, i) => {
+        {[...PROVIDERS, ...PROVIDERS, ...PROVIDERS, ...PROVIDERS].map((p, i) => {
           const Logo = PROVIDER_LOGOS[p.name];
           return (
             <span key={i} className="inline-flex items-center gap-2.5 shrink-0">
@@ -659,17 +663,22 @@ function Pricing() {
               <p className="text-xs text-ink-3 mt-1">Per 1K tokens, blended input and output.</p>
             </div>
             <ul>
-              {PRICES.map((p, i) => (
-                <li
-                  key={p.label}
-                  className="flex items-center gap-3 px-6 sm:px-7 py-3.5"
-                  style={{ borderTop: "1px solid rgb(var(--c-ink) / 0.06)" }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />
-                  <span className="text-sm text-ink flex-1 min-w-0 truncate">{p.label}</span>
-                  <span className="text-sm font-medium text-ink num shrink-0">{p.price}</span>
-                </li>
-              ))}
+              {PRICES.map((p, i) => {
+                const Logo = PROVIDER_LOGOS[p.provider];
+                return (
+                  <li
+                    key={p.label}
+                    className="flex items-center gap-3 px-6 sm:px-7 py-3.5"
+                    style={{ borderTop: "1px solid rgb(var(--c-ink) / 0.06)" }}
+                  >
+                    {Logo
+                      ? <Logo className="w-3.5 h-3.5 shrink-0" style={{ color: p.color }} />
+                      : <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />}
+                    <span className="text-sm text-ink flex-1 min-w-0 truncate">{p.label}</span>
+                    <span className="text-sm font-medium text-ink num shrink-0">{p.price}</span>
+                  </li>
+                );
+              })}
             </ul>
             <p className="px-6 sm:px-7 py-4 text-xs text-ink-3" style={{ borderTop: "1px solid rgb(var(--c-ink) / 0.06)" }}>
               Free-tier models from Groq, Cerebras and OpenRouter cost nothing at all.
