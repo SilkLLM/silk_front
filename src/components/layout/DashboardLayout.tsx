@@ -51,6 +51,7 @@ const USER_NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { label: "Providers",   href: "/admin/providers",   icon: <Zap size={17} /> },
+  { label: "Payment Providers", href: "/admin/payment-providers", icon: <Wallet size={17} /> },
   { label: "Models",      href: "/admin/models",      icon: <Settings size={17} /> },
   { label: "Marketplace", href: "/admin/marketplace", icon: <Store size={17} /> },
   { label: "Analytics",   href: "/admin/analytics",   icon: <Activity size={17} /> },
@@ -73,6 +74,7 @@ const TITLES: Record<string, string> = {
   "/dashboard/usage": "Usage",
   "/dashboard/notifications": "Notifications",
   "/admin/providers": "Providers",
+  "/admin/payment-providers": "Payment Providers",
   "/admin/models": "Model Control",
   "/admin/marketplace": "Marketplace",
   "/admin/analytics": "Reliability Analytics",

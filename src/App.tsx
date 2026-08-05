@@ -32,6 +32,7 @@ const ProviderHub   = lazy(() => import("@/pages/user/ProviderHub"));
 const Notifications = lazy(() => import("@/pages/user/Notifications"));
 const Chat          = lazy(() => import("@/pages/user/Chat"));
 const AdminProviders    = lazy(() => import("@/pages/admin/Providers"));
+const AdminPaymentProviders = lazy(() => import("@/pages/admin/PaymentProviders"));
 const AdminModels       = lazy(() => import("@/pages/admin/Models"));
 const AdminTopups       = lazy(() => import("@/pages/admin/Topups"));
 const AdminAlerts       = lazy(() => import("@/pages/admin/Alerts"));
@@ -132,6 +133,7 @@ function AppRoutes() {
         {/* Admin dashboard */}
         <Route path="/admin"            element={<AdminRoute><AdminProviders /></AdminRoute>} />
         <Route path="/admin/providers"  element={<AdminRoute><AdminProviders /></AdminRoute>} />
+        <Route path="/admin/payment-providers" element={<AdminRoute><AdminPaymentProviders /></AdminRoute>} />
         <Route path="/admin/models"     element={<AdminRoute><AdminModels /></AdminRoute>} />
         <Route path="/admin/marketplace" element={<AdminRoute><AdminMarketplace /></AdminRoute>} />
         <Route path="/admin/analytics"   element={<AdminRoute><AdminAnalytics /></AdminRoute>} />

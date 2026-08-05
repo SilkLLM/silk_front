@@ -14,7 +14,7 @@ import { useNavigate } from "react-router-dom";
 import {
   BarChart2, Bell, BookOpen, CreditCard, Coins, Key, LayoutDashboard, LogOut,
   MessageSquare, Monitor, Moon, PlusCircle, Search, Settings, ShieldCheck,
-  SlidersHorizontal, Store, Sun, Users, Zap, CornerDownLeft,
+  SlidersHorizontal, Store, Sun, Users, Zap, CornerDownLeft, Wallet,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,6 +66,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     if (isAdmin) {
       items.splice(7, 0,
         { id: "a-providers",   group: "Admin", label: "Providers",         icon: <Zap size={16} />,              run: go("/admin/providers") },
+        { id: "a-payment-providers", group: "Admin", label: "Payment Providers", icon: <Wallet size={16} />,     keywords: "paystack dodo flutterwave checkout rails", run: go("/admin/payment-providers") },
         { id: "a-models",      group: "Admin", label: "Model Control",     icon: <Settings size={16} />,         keywords: "pricing routing fallback", run: go("/admin/models") },
         { id: "a-marketplace", group: "Admin", label: "Marketplace",       icon: <Store size={16} />,            run: go("/admin/marketplace") },
         { id: "a-topups",      group: "Admin", label: "Top-Ups",           icon: <PlusCircle size={16} />,       run: go("/admin/topups") },

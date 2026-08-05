@@ -572,6 +572,19 @@ export const adminApi = {
     update: (id: string, data: any) => api.patch(`/admin/providers/${id}`, data),
     delete: (id: string) => api.delete(`/admin/providers/${id}`),
   },
+  paymentProviders: {
+    list: () => api.get("/admin/payment-providers"),
+    create: (data: {
+      id: string;
+      name: string;
+      secret_key: string;
+      public_key?: string;
+      webhook_secret?: string;
+      config?: Record<string, unknown>;
+    }) => api.post("/admin/payment-providers", data),
+    update: (id: string, data: any) => api.patch(`/admin/payment-providers/${id}`, data),
+    delete: (id: string) => api.delete(`/admin/payment-providers/${id}`),
+  },
   models: {
     list: () => api.get("/admin/models"),
     create: (data: {
