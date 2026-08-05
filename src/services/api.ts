@@ -614,6 +614,9 @@ export const adminApi = {
     ledger: (page = 1) => api.get("/admin/credits/ledger", { params: { page } }),
     users: () => api.get("/admin/credits/users"),
     refund: (data: any) => api.post("/admin/credits/refund", data),
+    paymentsSummary: () => api.get("/admin/credits/payments/summary"),
+    payments: (params: { page?: number; page_size?: number; provider?: string; status?: string; country?: string }) =>
+      api.get("/admin/credits/payments", { params }),
   },
   settings: {
     list: () => api.get("/admin/settings"),
