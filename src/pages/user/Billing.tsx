@@ -12,7 +12,7 @@ import React, { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
-  ArrowUpRight, CheckCircle2, CreditCard, Globe, Landmark, Receipt, RefreshCw, Wallet,
+  AlertTriangle, ArrowUpRight, CheckCircle2, CreditCard, Globe, Landmark, Receipt, RefreshCw, Wallet,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
@@ -36,30 +36,35 @@ const RAIL_COPY: Record<Rail, { icon: React.ReactNode; title: string; subtitle: 
   dodo: { icon: <CreditCard size={18} />, title: "Global card", subtitle: "Dodo Payments · card, digital wallets" },
 };
 
-function RailOption({ selected, onSelect, icon, title, subtitle }: {
-  selected: boolean; onSelect: () => void; icon: React.ReactNode; title: string; subtitle: string;
+function RailOption({ selected, disabled, onSelect, icon, title, subtitle }: {
+  selected: boolean; disabled?: boolean; onSelect: () => void; icon: React.ReactNode; title: string; subtitle: string;
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
+      disabled={disabled}
       aria-pressed={selected}
       className={clsx(
         "flex items-start gap-3 p-4 rounded-xl border text-left transition-all",
-        selected
-          ? "border-accent bg-accent/[0.07] shadow-xs"
-          : "border-line bg-surface hover:border-line-strong hover:bg-sunken",
+        disabled
+          ? "border-line bg-sunken opacity-50 cursor-not-allowed"
+          : selected
+            ? "border-accent bg-accent/[0.07] shadow-xs"
+            : "border-line bg-surface hover:border-line-strong hover:bg-sunken",
       )}
     >
-      <span className={clsx("shrink-0 mt-0.5", selected ? "text-accent-ink" : "text-ink-3")}>{icon}</span>
+      <span className={clsx("shrink-0 mt-0.5", selected && !disabled ? "text-accent-ink" : "text-ink-3")}>{icon}</span>
       <span className="min-w-0">
         <span className="block text-sm font-medium text-ink">{title}</span>
-        <span className="block text-xs text-ink-3 mt-0.5">{subtitle}</span>
+        <span className="block text-xs text-ink-3 mt-0.5">{disabled ? "Not available right now" : subtitle}</span>
       </span>
-      <span className={clsx(
-        "ml-auto w-4 h-4 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
-        selected ? "border-accent bg-accent" : "border-line-strong",
-      )} />
+      {!disabled && (
+        <span className={clsx(
+          "ml-auto w-4 h-4 rounded-full border-2 shrink-0 mt-0.5 transition-colors",
+          selected ? "border-accent bg-accent" : "border-line-strong",
+        )} />
+      )}
     </button>
   );
 }
@@ -69,12 +74,33 @@ export default function Billing() {
   const [params] = useSearchParams();
   const status = params.get("status");
   const [amount, setAmount] = useState(10);
-  const [rail, setRail] = useState<Rail>("paystack");
+  const [rail, setRail] = useState<Rail | "">("");
 
-  const { data: rateData, isLoading: rateLoading } = useQuery({
+  // Which rails the admin currently has enabled and configured - a rail
+  // toggled off from the admin dashboard must disappear as a live option
+  // here immediately, not just stop working silently when clicked.
+  const { data: railsData, isLoading: railsLoading } = useQuery({
+    queryKey: ["billing-rails"],
+    queryFn: () => billingApi.getRails().then((r) => r.data as { id: string; name: string; enabled: boolean; available: boolean }[]),
+    staleTime: 60 * 1000,
+  });
+
+  const availableRails = (railsData || []).filter((r) => r.available && r.id in RAIL_COPY).map((r) => r.id as Rail);
+
+  useEffect(() => {
+    if (availableRails.length && !availableRails.includes(rail as Rail)) {
+      setRail(availableRails[0]);
+    }
+  }, [availableRails, rail]);
+
+  const {
+    data: rateData, isLoading: rateLoading, isError: rateErrored, refetch: refetchRate,
+  } = useQuery({
     queryKey: ["exchange-rate"],
     queryFn: () => billingApi.getRate().then((r) => r.data),
     staleTime: 60 * 60 * 1000,
+    enabled: rail === "paystack",
+    retry: 1,
   });
 
   const { data: history, isLoading: historyLoading } = useQuery({
@@ -83,9 +109,9 @@ export default function Billing() {
   });
 
   const checkout = useMutation({
-    mutationFn: () => billingApi.checkout(amount, rail).then((r) => r.data),
+    mutationFn: () => billingApi.checkout(amount, rail as Rail).then((r) => r.data),
     onSuccess: (data) => { window.location.href = data.checkout_url; },
-    onError: () => toast.error("Could not start checkout. Please try again."),
+    onError: (e: any) => toast.error(e?.response?.data?.detail || "Could not start checkout. Please try again."),
   });
 
   useEffect(() => {
@@ -95,9 +121,9 @@ export default function Billing() {
     }
   }, [status]);
 
-  const effectiveRate = rateData?.effective_rate || 0;
-  const estimatedNgn = amount * (effectiveRate || 1600 * 1.1);
-  const valid = amount >= MIN_AMOUNT && amount <= 10_000;
+  const rateReady = rail !== "paystack" || (!rateLoading && !rateErrored && !!rateData?.effective_rate);
+  const estimatedNgn = amount * (rateData?.effective_rate || 0);
+  const valid = amount >= MIN_AMOUNT && amount <= 10_000 && !!rail && rateReady;
 
   return (
     <DashboardLayout>
@@ -168,18 +194,29 @@ export default function Billing() {
             </Field>
 
             <Field label="Payment method">
-              <div className="grid sm:grid-cols-2 gap-3">
-                {(Object.keys(RAIL_COPY) as Rail[]).map((r) => (
-                  <RailOption
-                    key={r}
-                    selected={rail === r}
-                    onSelect={() => setRail(r)}
-                    icon={RAIL_COPY[r].icon}
-                    title={RAIL_COPY[r].title}
-                    subtitle={RAIL_COPY[r].subtitle}
-                  />
-                ))}
-              </div>
+              {railsLoading ? (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
+                </div>
+              ) : !availableRails.length ? (
+                <Callout tone="warning" icon={<AlertTriangle size={15} />}>
+                  No payment method is available right now. Please check back shortly.
+                </Callout>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {(Object.keys(RAIL_COPY) as Rail[]).map((r) => (
+                    <RailOption
+                      key={r}
+                      selected={rail === r}
+                      disabled={!availableRails.includes(r)}
+                      onSelect={() => setRail(r)}
+                      icon={RAIL_COPY[r].icon}
+                      title={RAIL_COPY[r].title}
+                      subtitle={RAIL_COPY[r].subtitle}
+                    />
+                  ))}
+                </div>
+              )}
             </Field>
 
             {/* Summary: exactly what is about to be charged. */}
@@ -194,14 +231,30 @@ export default function Billing() {
                   {rail !== "paystack"
                     ? usd(amount)
                     : rateLoading
-                      ? <span className="inline-flex items-center gap-1.5 text-ink-3"><RefreshCw size={12} className="animate-spin" /> fetching rate</span>
-                      : `₦${estimatedNgn.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                      ? <span className="inline-flex items-center gap-1.5 text-ink-3"><RefreshCw size={12} className="animate-spin" /> fetching live rate</span>
+                      : rateErrored
+                        ? <span className="text-danger">rate unavailable</span>
+                        : `₦${estimatedNgn.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                 </span>
               </div>
-              {rail === "paystack" && !rateLoading && rateData?.usd_to_ngn_rate && (
+              {rail === "paystack" && !rateLoading && !rateErrored && rateData?.usd_to_ngn_rate && (
                 <p className="text-2xs text-ink-3 num">
-                  At ₦{rateData.usd_to_ngn_rate.toFixed(2)}/$ plus the conversion fee · rate refreshes every 6 hours
+                  At ₦{rateData.usd_to_ngn_rate.toFixed(2)}/$ live, plus the conversion fee · refreshes hourly
                 </p>
+              )}
+              {rail === "paystack" && rateErrored && (
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <p className="text-2xs text-danger">
+                    Could not reach a live exchange rate. Nothing will be charged from a guessed rate.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => refetchRate()}
+                    className="text-2xs font-medium text-accent-ink hover:underline shrink-0"
+                  >
+                    Retry
+                  </button>
+                </div>
               )}
             </div>
 
@@ -214,7 +267,12 @@ export default function Billing() {
             >
               {checkout.isPending ? "Redirecting..." : <>Add ${amount} in credits <ArrowUpRight size={15} /></>}
             </Button>
-            {!valid && (
+            {!valid && amount >= MIN_AMOUNT && amount <= 10_000 && rail && !rateReady && (
+              <p className="text-xs text-danger text-center -mt-3">
+                Waiting on a live exchange rate before this can be charged accurately.
+              </p>
+            )}
+            {!valid && (amount < MIN_AMOUNT || amount > 10_000) && (
               <p className="text-xs text-danger text-center -mt-3">
                 Enter an amount between ${MIN_AMOUNT} and $10,000.
               </p>
