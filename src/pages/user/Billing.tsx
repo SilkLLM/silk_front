@@ -1,6 +1,6 @@
 /**
  * Billing.tsx
- * Buy credits (Stripe in USD, Paystack in NGN) and review past purchases.
+ * Buy credits (Paystack in NGN, or Dodo/Flutterwave in USD) and review past purchases.
  *
  * The amount and the payment rail are the whole job, so they lead; the summary
  * restates exactly what is about to be charged before the button commits.
@@ -12,7 +12,7 @@ import React, { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
-  ArrowUpRight, CheckCircle2, CreditCard, Globe, Receipt, RefreshCw, Wallet,
+  ArrowUpRight, CheckCircle2, CreditCard, Globe, Landmark, Receipt, RefreshCw, Wallet,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
@@ -28,7 +28,13 @@ import {
 const PRESETS = [5, 10, 25, 50, 100, 250];
 const MIN_AMOUNT = 5;
 
-type Rail = "stripe" | "paystack";
+type Rail = "paystack" | "dodo" | "flutterwave";
+
+const RAIL_COPY: Record<Rail, { icon: React.ReactNode; title: string; subtitle: string }> = {
+  paystack: { icon: <Globe size={18} />, title: "NGN / Africa", subtitle: "Paystack · card, bank, USSD" },
+  flutterwave: { icon: <Landmark size={18} />, title: "Pan-Africa", subtitle: "Flutterwave · card, mobile money, bank" },
+  dodo: { icon: <CreditCard size={18} />, title: "Global card", subtitle: "Dodo Payments · card, digital wallets" },
+};
 
 function RailOption({ selected, onSelect, icon, title, subtitle }: {
   selected: boolean; onSelect: () => void; icon: React.ReactNode; title: string; subtitle: string;
@@ -63,12 +69,11 @@ export default function Billing() {
   const [params] = useSearchParams();
   const status = params.get("status");
   const [amount, setAmount] = useState(10);
-  const [rail, setRail] = useState<Rail>("stripe");
+  const [rail, setRail] = useState<Rail>("paystack");
 
   const { data: rateData, isLoading: rateLoading } = useQuery({
     queryKey: ["exchange-rate"],
     queryFn: () => billingApi.getRate().then((r) => r.data),
-    enabled: rail === "paystack",
     staleTime: 60 * 60 * 1000,
   });
 
@@ -164,20 +169,16 @@ export default function Billing() {
 
             <Field label="Payment method">
               <div className="grid sm:grid-cols-2 gap-3">
-                <RailOption
-                  selected={rail === "stripe"}
-                  onSelect={() => setRail("stripe")}
-                  icon={<CreditCard size={18} />}
-                  title="Card (USD)"
-                  subtitle="Stripe · worldwide"
-                />
-                <RailOption
-                  selected={rail === "paystack"}
-                  onSelect={() => setRail("paystack")}
-                  icon={<Globe size={18} />}
-                  title="NGN / Africa"
-                  subtitle="Paystack · card, bank, USSD"
-                />
+                {(Object.keys(RAIL_COPY) as Rail[]).map((r) => (
+                  <RailOption
+                    key={r}
+                    selected={rail === r}
+                    onSelect={() => setRail(r)}
+                    icon={RAIL_COPY[r].icon}
+                    title={RAIL_COPY[r].title}
+                    subtitle={RAIL_COPY[r].subtitle}
+                  />
+                ))}
               </div>
             </Field>
 
@@ -187,28 +188,20 @@ export default function Billing() {
                 <span className="text-ink-2">Credits added</span>
                 <span className="text-ink font-medium num">{usd(amount)}</span>
               </div>
-              {rail === "paystack" && (
-                <>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-ink-2">You pay</span>
-                    <span className="text-ink font-medium num">
-                      {rateLoading
-                        ? <span className="inline-flex items-center gap-1.5 text-ink-3"><RefreshCw size={12} className="animate-spin" /> fetching rate</span>
-                        : `₦${estimatedNgn.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-                    </span>
-                  </div>
-                  {!rateLoading && rateData?.usd_to_ngn_rate && (
-                    <p className="text-2xs text-ink-3 num">
-                      At ₦{rateData.usd_to_ngn_rate.toFixed(2)}/$ plus the conversion fee · rate refreshes every 6 hours
-                    </p>
-                  )}
-                </>
-              )}
-              {rail === "stripe" && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-ink-2">You pay</span>
-                  <span className="text-ink font-medium num">{usd(amount)}</span>
-                </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-ink-2">You pay</span>
+                <span className="text-ink font-medium num">
+                  {rail !== "paystack"
+                    ? usd(amount)
+                    : rateLoading
+                      ? <span className="inline-flex items-center gap-1.5 text-ink-3"><RefreshCw size={12} className="animate-spin" /> fetching rate</span>
+                      : `₦${estimatedNgn.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                </span>
+              </div>
+              {rail === "paystack" && !rateLoading && rateData?.usd_to_ngn_rate && (
+                <p className="text-2xs text-ink-3 num">
+                  At ₦{rateData.usd_to_ngn_rate.toFixed(2)}/$ plus the conversion fee · rate refreshes every 6 hours
+                </p>
               )}
             </div>
 

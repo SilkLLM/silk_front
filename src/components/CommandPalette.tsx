@@ -48,7 +48,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
       { id: "chat",      group: "Go to", label: "Chat",          icon: <MessageSquare size={16} />,   keywords: "playground prompt", run: go("/dashboard/chat") },
       { id: "hub",       group: "Go to", label: "Provider Hub",  icon: <Coins size={16} />,           keywords: "byok earn deposit key", run: go("/dashboard/provider-hub") },
       { id: "keys",      group: "Go to", label: "API Keys",      icon: <Key size={16} />,             keywords: "token secret", run: go("/dashboard/keys") },
-      { id: "billing",   group: "Go to", label: "Billing",       icon: <CreditCard size={16} />,      keywords: "credits payment stripe paystack", run: go("/dashboard/billing") },
+      { id: "billing",   group: "Go to", label: "Billing",       icon: <CreditCard size={16} />,      keywords: "credits payment paystack dodo flutterwave", run: go("/dashboard/billing") },
       { id: "usage",     group: "Go to", label: "Usage",         icon: <BarChart2 size={16} />,       keywords: "logs spend history", run: go("/dashboard/usage") },
       { id: "notifs",    group: "Go to", label: "Notifications", icon: <Bell size={16} />,            keywords: "inbox alerts", run: go("/dashboard/notifications") },
 

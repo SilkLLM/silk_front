@@ -292,9 +292,10 @@ export const usageApi = {
 };
 
 export const billingApi = {
-  checkout: (amountUsd: number, provider: "stripe" | "paystack") =>
+  checkout: (amountUsd: number, provider: "paystack" | "dodo" | "flutterwave") =>
     api.post("/billing/checkout", { amount_usd: amountUsd, provider }),
-  getRate: () => api.get("/billing/rate"),  // <-- NEW: fetch live USD/NGN rate
+  getRate: () => api.get("/billing/rate"),
+  getRails: () => api.get("/billing/rails"),
 };
 
 export const modelsApi = {
