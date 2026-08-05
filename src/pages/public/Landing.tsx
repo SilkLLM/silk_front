@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
+import { PROVIDER_LOGOS } from "@/components/public/ProviderLogos";
 import { Badge } from "@/components/ui";
 
 // ── Content ─────────────────────────────────────────────────────────────────
@@ -335,12 +336,15 @@ function Marquee() {
       <div className="rule-fade absolute top-0 inset-x-0" />
       <div className="rule-fade absolute bottom-0 inset-x-0" />
       <div className="flex gap-10 sm:gap-14 w-max animate-marquee hover:[animation-play-state:paused]">
-        {[...PROVIDERS, ...PROVIDERS].map((p, i) => (
-          <span key={i} className="inline-flex items-center gap-2.5 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />
-            <span className="text-sm font-medium text-ink-2 whitespace-nowrap">{p.name}</span>
-          </span>
-        ))}
+        {[...PROVIDERS, ...PROVIDERS].map((p, i) => {
+          const Logo = PROVIDER_LOGOS[p.name];
+          return (
+            <span key={i} className="inline-flex items-center gap-2.5 shrink-0">
+              {Logo && <Logo className="w-4 h-4" style={{ color: p.color }} />}
+              <span className="text-sm font-medium text-ink-2 whitespace-nowrap">{p.name}</span>
+            </span>
+          );
+        })}
       </div>
       {/* Fade the strip into the page at both ends so it reads as continuous. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-24"
@@ -528,32 +532,35 @@ function Providers() {
       />
 
       <div className="mt-12 flex flex-wrap justify-center gap-3 sm:gap-4 max-w-4xl mx-auto">
-        {PROVIDERS.map((p, i) => (
-          <Reveal key={p.name} delay={(i % 5) * 0.05}>
-            <div
-              className="group relative flex items-center gap-3 rounded-2xl glass pl-3 pr-5 py-3 hover:-translate-y-1 transition-transform duration-300"
-              // Alternating vertical offset breaks the row alignment so the
-              // field reads as scattered rather than tabular.
-              style={{ transform: `translateY(${(i % 3) * 8}px)` }}
-            >
-              <span
-                aria-hidden="true"
-                className="absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                style={{ background: `radial-gradient(80% 120% at 0% 0%, ${p.color}26, transparent 70%)` }}
-              />
-              <span
-                className="relative w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
-                style={{ background: `${p.color}22`, color: p.color }}
+        {PROVIDERS.map((p, i) => {
+          const Logo = PROVIDER_LOGOS[p.name];
+          return (
+            <Reveal key={p.name} delay={(i % 5) * 0.05}>
+              <div
+                className="group relative flex items-center gap-3 rounded-2xl glass pl-3 pr-5 py-3 hover:-translate-y-1 transition-transform duration-300"
+                // Alternating vertical offset breaks the row alignment so the
+                // field reads as scattered rather than tabular.
+                style={{ transform: `translateY(${(i % 3) * 8}px)` }}
               >
-                {p.name.slice(0, 2)}
-              </span>
-              <span className="relative min-w-0">
-                <span className="block text-sm font-semibold text-ink whitespace-nowrap">{p.name}</span>
-                <span className="block text-2xs text-ink-3 whitespace-nowrap">{p.sub}</span>
-              </span>
-            </div>
-          </Reveal>
-        ))}
+                <span
+                  aria-hidden="true"
+                  className="absolute -inset-px rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  style={{ background: `radial-gradient(80% 120% at 0% 0%, ${p.color}26, transparent 70%)` }}
+                />
+                <span
+                  className="relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: `${p.color}22`, color: p.color }}
+                >
+                  {Logo ? <Logo className="w-5 h-5" /> : p.name.slice(0, 2)}
+                </span>
+                <span className="relative min-w-0">
+                  <span className="block text-sm font-semibold text-ink whitespace-nowrap">{p.name}</span>
+                  <span className="block text-2xs text-ink-3 whitespace-nowrap">{p.sub}</span>
+                </span>
+              </div>
+            </Reveal>
+          );
+        })}
       </div>
     </Section>
   );
