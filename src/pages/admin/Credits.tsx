@@ -11,17 +11,18 @@
 
 import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
-  AlertTriangle, BookOpen, Clock, Gift, Globe2, TrendingUp, Users, Wallet, X,
+  AlertTriangle, BookOpen, Clock, Gift, Globe2, Lock, TrendingUp, Users, Wallet, X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { adminApi } from "@/services/api";
+import { useAuth } from "@/hooks/useAuth";
 import {
-  Badge, Button, EmptyState, Field, Input, PageHeader, Pagination, Panel,
-  SearchInput, Select, Skeleton, StatTile, Tabs, Toolbar,
+  Badge, Button, Callout, EmptyState, Field, Input, Modal, PageHeader, Pagination, Panel,
+  SearchInput, Select, Skeleton, StatTile, Switch, Tabs, Toolbar,
 } from "@/components/ui";
 import { ChartTooltip, ChartLegend, compact, percent, usd, usdPrecise, usdShort, useChartTheme } from "@/lib/charts";
 
@@ -46,6 +47,8 @@ export default function AdminCredits() {
   const [payProvider, setPayProvider] = useState("all");
   const [payStatus, setPayStatus] = useState("all");
   const [payCountry, setPayCountry] = useState("all");
+  const [detailUser, setDetailUser] = useState<any>(null);
+  const { user: currentUser } = useAuth();
   const t = useChartTheme();
 
   const { data: ledger, isLoading: ledgerLoading } = useQuery({
@@ -76,6 +79,17 @@ export default function AdminCredits() {
     queryKey: ["admin-users"],
     queryFn: () => adminApi.credits.users().then((r) => r.data),
     enabled: tab === "users" || tab === "refund",
+  });
+
+  const updateUser = useMutation({
+    mutationFn: (data: { role?: string; is_active?: boolean }) =>
+      adminApi.credits.updateUser(detailUser.id, data).then((r) => r.data),
+    onSuccess: (updated) => {
+      toast.success("User updated.");
+      qc.setQueryData<any[]>(["admin-users"], (old) => (old || []).map((u) => (u.id === updated.id ? updated : u)));
+      setDetailUser(updated);
+    },
+    onError: (e: any) => toast.error(e.response?.data?.detail || "Could not update the user."),
   });
 
   const issueRefund = useMutation({
@@ -238,15 +252,19 @@ export default function AdminCredits() {
                     {filtered.map((u: any) => (
                       <tr key={u.id}>
                         <td>
-                          <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setDetailUser(u)}
+                            className="flex items-center gap-2.5 text-left rounded-md -mx-1 px-1 py-0.5 hover:bg-sunken transition-colors"
+                          >
                             <span className="w-7 h-7 rounded-full bg-ink/[0.06] border border-line text-2xs font-semibold text-ink-2 flex items-center justify-center shrink-0 uppercase">
                               {(u.name || u.email || "?")[0]}
                             </span>
                             <span className="min-w-0">
-                              <span className="block text-sm text-ink truncate">{u.name || "-"}</span>
+                              <span className="block text-sm text-ink truncate hover:underline">{u.name || "-"}</span>
                               <span className="block text-2xs text-ink-3 truncate">{u.email}</span>
                             </span>
-                          </div>
+                          </button>
                         </td>
                         <td><Badge tone={u.role === "user" ? "neutral" : "brand"}>{u.role}</Badge></td>
                         <td className="text-right num text-sm text-ink font-medium">{usd(u.balance)}</td>
@@ -582,6 +600,74 @@ export default function AdminCredits() {
           </Panel>
         </>
       )}
+
+      <Modal
+        open={!!detailUser}
+        onClose={() => setDetailUser(null)}
+        title={detailUser?.name || detailUser?.email || "User"}
+        description={detailUser?.email}
+        icon={<Users size={17} />}
+        size="sm"
+        footer={<Button variant="ghost" onClick={() => setDetailUser(null)}>Close</Button>}
+      >
+        {detailUser && (
+          <div className="space-y-5">
+            {currentUser?.id === detailUser.id && (
+              <Callout tone="info" icon={<Lock size={15} />}>
+                This is your own account. Role and status can only be changed from another admin's account, so you can never lock yourself out.
+              </Callout>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-line bg-sunken px-3.5 py-3">
+                <p className="text-2xs text-ink-3">Balance</p>
+                <p className="text-lg font-semibold text-ink num mt-0.5">{usd(detailUser.balance)}</p>
+              </div>
+              <div className="rounded-xl border border-line bg-sunken px-3.5 py-3">
+                <p className="text-2xs text-ink-3">Signed in with</p>
+                <p className="text-sm text-ink capitalize mt-0.5">{detailUser.oauth_provider || "-"}</p>
+              </div>
+            </div>
+
+            <Field label="Role" hint="Admins and super admins can reach every /admin page.">
+              <Select
+                value={detailUser.role}
+                disabled={currentUser?.id === detailUser.id || updateUser.isPending}
+                onChange={(e) => updateUser.mutate({ role: e.target.value })}
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+                <option value="super_admin">Super admin</option>
+              </Select>
+            </Field>
+
+            <Field label="Account status">
+              <Switch
+                checked={detailUser.is_active}
+                stateLabels={["Active", "Suspended"]}
+                label="Account status"
+                disabled={currentUser?.id === detailUser.id}
+                pending={updateUser.isPending}
+                onChange={(active) => updateUser.mutate({ is_active: active })}
+              />
+            </Field>
+
+            <div className="pt-4 border-t border-line flex items-center justify-between">
+              <span className="text-2xs text-ink-3 num">Joined {format(new Date(detailUser.created_at), "MMM d, yyyy")}</span>
+              <Button
+                size="sm" variant="ghost" icon={<Gift size={13} />}
+                onClick={() => {
+                  setRefund({ user_id: detailUser.id, amount_usd: "", reason: "" });
+                  setDetailUser(null);
+                  setTab("refund");
+                }}
+              >
+                Issue refund
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </DashboardLayout>
   );
 }

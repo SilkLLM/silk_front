@@ -613,6 +613,8 @@ export const adminApi = {
   credits: {
     ledger: (page = 1) => api.get("/admin/credits/ledger", { params: { page } }),
     users: () => api.get("/admin/credits/users"),
+    updateUser: (id: string, data: { role?: string; is_active?: boolean }) =>
+      api.patch(`/admin/credits/users/${id}`, data),
     refund: (data: any) => api.post("/admin/credits/refund", data),
     paymentsSummary: () => api.get("/admin/credits/payments/summary"),
     payments: (params: { page?: number; page_size?: number; provider?: string; status?: string; country?: string }) =>
