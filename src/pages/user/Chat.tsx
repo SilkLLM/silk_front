@@ -22,7 +22,6 @@ import toast from "react-hot-toast";
 import clsx from "clsx";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Markdown from "@/components/Markdown";
-import { useAuth } from "@/hooks/useAuth";
 import { modelsApi, generateApi, mediaApi } from "@/services/api";
 import {
   Button, Checkbox, EmptyState, Field, IconButton, Input, Meter, Modal, Select,
@@ -148,7 +147,6 @@ function SliderRow({ label, value, onChange }: { label: string; value: number; o
 
 export default function Chat() {
   const qc = useQueryClient();
-  const { isAdmin } = useAuth();
   const [store, setStore] = useState<ChatStore>(() => purge(loadStore()));
   const [activeId, setActiveId] = useState<string | null>(store.conversations[0]?.id || null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -638,7 +636,7 @@ export default function Chat() {
                 ? <option value="">No models</option>
                 : providerModels.map((m: any) => (
                     <option key={m.id} value={m.id}>
-                      {m.display_name}{isAdmin && m.is_free ? " (free)" : ""}
+                      {m.display_name}{m.is_free ? " (free)" : ""}
                     </option>
                   ))}
             </Select>

@@ -37,6 +37,19 @@ export function notifyNeedCredit(detail?: string) {
 }
 
 /**
+ * Broadcast that a request succeeded only because the trial substituted a
+ * free model for the one actually requested (out of balance, engine picked
+ * a model it has vetted as reliably free instead of failing the request).
+ * Fired from the chat stream's final "meta" event; deliberately separate
+ * from silk:need-credit; a request that just succeeded should get a
+ * light, dismissible nudge, not the same blocking "you're out of credit"
+ * modal used for an actual failure.
+ */
+export function notifyTrialFreeModelUsed(servedModel: string) {
+  window.dispatchEvent(new CustomEvent("silk:trial-free-model", { detail: { servedModel } }));
+}
+
+/**
  * Announce that the backend could not be reached, so the app can show a
  * maintenance screen instead of a broken one.
  *
@@ -389,6 +402,8 @@ export const generateApi = {
               } else if (parsed.error) {
                 onError(parsed.error);
                 return;
+              } else if (parsed.meta?.served_free_model) {
+                notifyTrialFreeModelUsed(parsed.meta.model);
               }
             } catch (e) {
               // ignore parse errors for incomplete chunks

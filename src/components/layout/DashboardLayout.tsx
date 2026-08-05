@@ -22,6 +22,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { notificationsApi, trialApi } from "@/services/api";
 import { prefetchPath } from "@/lib/prefetch";
 import PaymentReminderModal from "@/components/PaymentReminderModal";
+import TrialFreeModelToast from "@/components/TrialFreeModelToast";
 import CommandPalette from "@/components/CommandPalette";
 import Logo from "@/components/Logo";
 import InstallInvite, { OfflineBar, UpdateBar } from "@/components/AppInstall";
@@ -490,6 +491,7 @@ export default function DashboardLayout({ children, fullBleed }: {
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
       <PaymentReminderModal />
+      <TrialFreeModelToast />
       <InstallInvite />
     </div>
   );
