@@ -24,6 +24,7 @@ import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
 import { PROVIDER_LOGOS } from "@/components/public/ProviderLogos";
 import { Badge } from "@/components/ui";
+import { CodeBlock } from "@/components/public/Prose";
 import { useSEO } from "@/lib/seo";
 
 // ── Content ─────────────────────────────────────────────────────────────────
@@ -330,6 +331,89 @@ function Hero() {
         </div>
       </div>
     </section>
+  );
+}
+
+// ── Migration comparison ─────────────────────────────────────────────────────
+
+const MIGRATE_BEFORE = `import os
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage
+
+primary = ChatOpenAI(
+    model="gpt-4o",
+    api_key=os.environ["OPENAI_API_KEY"],
+    temperature=0.7,
+)
+fallback = ChatAnthropic(
+    model="claude-3-5-sonnet-20241022",
+    api_key=os.environ["ANTHROPIC_API_KEY"],
+    temperature=0.7,
+)
+
+def ask(prompt: str) -> str:
+    try:
+        return primary.invoke([HumanMessage(content=prompt)]).content
+    except Exception:
+        return fallback.invoke([HumanMessage(content=prompt)]).content
+
+print(ask("Hello"))`;
+
+const MIGRATE_AFTER = `import silkllm
+
+client = silkllm.Client()
+
+res = client.generate(
+    messages=[{"role": "user", "content": "Hello"}],
+    model="gpt-4o",
+)
+
+print(res.content)   # automatic fallback already built in`;
+
+/** Two-tab before/after, reusing Prose's CodeBlock so both panes get syntax
+ *  colouring and a copy button for free. Deliberately a fair comparison, not
+ *  a strawman: the "before" is genuine LangChain multi-provider fallback
+ *  code, the kind teams actually ship, not an artificially bloated version. */
+function Migrate() {
+  const [tab, setTab] = useState<"before" | "after">("before");
+
+  return (
+    <Section atmosphere>
+      <SectionHead
+        eyebrow="Migration"
+        title="Delete the fallback code you wrote by hand"
+        sub="Two providers, one manual try/except, two API keys to manage - or one client that already does this. Same behavior, less to maintain."
+        center
+      />
+
+      <Reveal delay={0.1} className="mt-10 max-w-2xl mx-auto">
+        <div className="flex items-center justify-center gap-0.5 p-0.5 rounded-lg bg-sunken border border-line mb-4 w-fit mx-auto">
+          {([
+            ["before", "OpenAI + LangChain"],
+            ["after", "SilkLLM"],
+          ] as const).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setTab(v)}
+              aria-pressed={tab === v}
+              className={clsx(
+                "px-4 h-9 rounded-[7px] text-sm font-medium transition-all",
+                tab === v ? "bg-surface text-ink shadow-xs" : "text-ink-2 hover:text-ink",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <CodeBlock lang="python" code={tab === "before" ? MIGRATE_BEFORE : MIGRATE_AFTER} />
+        <p className="text-xs text-ink-3 text-center mt-3">
+          {tab === "before"
+            ? "2 SDKs, 2 provider keys, fallback logic you own and test yourself."
+            : "1 SDK, 1 key, fallback logic SilkLLM owns and tests for you."}
+        </p>
+      </Reveal>
+    </Section>
   );
 }
 
@@ -847,6 +931,7 @@ export default function Landing() {
       <PublicNav />
       <main>
         <Hero />
+        <Migrate />
         <Marquee />
         <Modalities />
         <Marketplace />
