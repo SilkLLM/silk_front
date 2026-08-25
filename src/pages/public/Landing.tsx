@@ -820,9 +820,9 @@ const LANDING_JSONLD = [
 
 export default function Landing() {
   useSEO({
-    title: "SilkLLM - One key for every AI model, and a marketplace that pays you back",
+    title: "SilkLLM — One API key for every AI model, marketplace included",
     description:
-      "One API key across text, image, audio and video models from OpenAI, Anthropic, Google, DeepSeek and xAI. Bring your own provider key and earn credits when others use it. Start free, and keep your chats on your own device.",
+      "One API key for text, image, audio and video across OpenAI, Anthropic, Google, DeepSeek, xAI and more. Bring your own key and earn credits.",
     path: "/",
     jsonLd: LANDING_JSONLD,
   });

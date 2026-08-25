@@ -9,8 +9,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0D0F10" />
     <link rel="canonical" href="https://getsilkllm.com/" />
-    <title>SilkLLM - One key for every AI model, and a marketplace that pays you back</title>
-    <meta name="description" content="One API key across text, image, audio and video models from OpenAI, Anthropic, Google, DeepSeek and xAI. Bring your own provider key and earn credits when others use it. Start free, and keep your chats on your own device." />
+    <title>SilkLLM — One API key for every AI model, marketplace included</title>
+    <meta name="description" content="One API key for text, image, audio and video across OpenAI, Anthropic, Google, DeepSeek, xAI and more. Bring your own key and earn credits." />
     <meta name="keywords" content="LLM gateway, unified AI API, BYOK, AI marketplace, OpenAI, Anthropic, Gemini, DeepSeek, xAI, multimodal, image generation, text to speech" />
 
     <!-- Open Graph -->
@@ -135,6 +135,22 @@
     </script>
   </head>
   <body>
+    <!--
+      Real markup for crawlers that fetch this file without executing
+      JavaScript. React replaces #root's whole subtree on mount, so this is
+      invisible to every real browser and never conflicts with the app's own
+      <h1> in src/pages/public/Landing.tsx - it exists purely so a static
+      parse of this document finds a genuine, on-topic <h1> instead of none.
+    -->
+    <noscript>
+      <h1>SilkLLM — One API key for every AI model</h1>
+      <p>
+        Text, image, audio and video from OpenAI, Anthropic, Google, DeepSeek,
+        xAI and more, through a single endpoint and a single prepaid balance.
+        Bring your own provider key and earn credits when others use it.
+      </p>
+      <p><a href="/docs">Read the documentation</a></p>
+    </noscript>
     <div id="root">
       <!--
         The first thing anyone sees, and it costs no requests.
