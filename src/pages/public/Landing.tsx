@@ -313,6 +313,15 @@ function Hero() {
                 ))}
               </div>
             </Reveal>
+
+            <Reveal delay={0.3}>
+              <Link
+                to="/playground"
+                className="inline-flex items-center gap-1.5 text-sm text-accent-ink font-medium mt-6 hover:underline underline-offset-4 decoration-dotted"
+              >
+                <Sparkles size={14} /> Paste your own OpenAI response and see it flatten, live <ArrowRight size={14} />
+              </Link>
+            </Reveal>
           </div>
 
           <Reveal delay={0.1} className="min-w-0">

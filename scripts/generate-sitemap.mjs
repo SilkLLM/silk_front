@@ -31,6 +31,7 @@ const PUBLIC_URLS = [
   { loc: "/guides", changefreq: "weekly", priority: "0.6" },
   { loc: "/guides/llm-provider-failover", changefreq: "monthly", priority: "0.6" },
   { loc: "/guides/one-api-key-multiple-providers", changefreq: "monthly", priority: "0.6" },
+  { loc: "/playground", changefreq: "monthly", priority: "0.7" },
 ];
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>

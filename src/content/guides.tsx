@@ -181,6 +181,13 @@ print(gpt.content, claude.content, gemini.content)`} />
           integration cost of that decision - you can change your mind about which model
           serves a request by changing a string, not your codebase.
         </Para>
+        <Callout>
+          Curious what your existing OpenAI response looks like flattened?{" "}
+          <Link to="/playground" className="text-accent-ink underline decoration-dotted underline-offset-4">
+            Paste it into Compare My Payload
+          </Link>{" "}
+          and see it side by side with the SilkLLM shape, live.
+        </Callout>
       </>
     ),
   },

@@ -969,6 +969,7 @@ const SECTIONS = [
         <Para>
           More on this: <Link to="/guides/llm-provider-failover" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">automatic provider failover</Link> and{" "}
           <Link to="/guides/one-api-key-multiple-providers" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">calling multiple providers from one key</Link>.
+          Already have an OpenAI response lying around? <Link to="/playground" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">paste it here</Link> and see this shape instantly.
         </Para>
       </>
     ),

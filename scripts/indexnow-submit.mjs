@@ -31,6 +31,7 @@ const URL_LIST = [
   `https://${HOST}/guides`,
   `https://${HOST}/guides/llm-provider-failover`,
   `https://${HOST}/guides/one-api-key-multiple-providers`,
+  `https://${HOST}/playground`,
 ];
 
 const res = await fetch("https://api.indexnow.org/indexnow", {

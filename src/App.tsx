@@ -26,6 +26,7 @@ const Multimodal      = lazy(() => import("@/pages/public/Multimodal"));
 const Alternatives    = lazy(() => import("@/pages/public/Alternatives"));
 const Guides          = lazy(() => import("@/pages/public/Guides"));
 const GuideArticle    = lazy(() => import("@/pages/public/GuideArticle"));
+const Playground      = lazy(() => import("@/pages/public/Playground"));
 const Login         = lazy(() => import("@/pages/auth/Login"));
 const Callback      = lazy(() => import("@/pages/auth/Callback"));
 const UserDashboard = lazy(() => import("@/pages/user/Dashboard"));
@@ -129,6 +130,7 @@ function AppRoutes() {
         <Route path="/alternatives"      element={<Alternatives />} />
         <Route path="/guides"            element={<Guides />} />
         <Route path="/guides/:slug"      element={<GuideArticle />} />
+        <Route path="/playground"        element={<Playground />} />
 
         {/* Auth */}
         <Route path="/login"          element={<Login />} />

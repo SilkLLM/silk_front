@@ -20,7 +20,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { IconButton, Menu as DropMenu, MenuItem } from "@/components/ui";
 
 const LINKS = [
-  { label: "Models", href: "/#providers" },
+  { label: "Playground", href: "/playground" },
   { label: "Marketplace", href: "/marketplace" },
   { label: "Multimodal", href: "/multimodal" },
   { label: "Pricing", href: "/#pricing" },
@@ -179,6 +179,7 @@ const FOOTER_GROUPS = [
     title: "Developers",
     links: [
       { label: "Documentation", href: "/docs" },
+      { label: "Compare My Payload", href: "/playground" },
       { label: "Quickstart", href: "/docs#quickstart" },
       { label: "API reference", href: "/docs#generate" },
       { label: "Guides", href: "/guides" },
