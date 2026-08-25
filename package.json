@@ -5,9 +5,11 @@
   "description": "SilkLLM Frontend — Admin Dashboard, User Dashboard, and Landing Page",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && npm run seo:generate && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
+    "seo:generate": "node scripts/generate-sitemap.mjs",
+    "seo:indexnow": "node scripts/indexnow-submit.mjs",
     "audit:layout": "vite build && node scripts/audit-layout.mjs",
     "audit:pwa": "vite build && node scripts/audit-pwa.mjs"
   },

@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Github, ShieldCheck } from "lucide-react";
 import { authApi } from "@/services/api";
 import Logo from "@/components/Logo";
+import { useNoIndex } from "@/lib/seo";
 
 function GoogleIcon() {
   return (
@@ -27,6 +28,7 @@ function GoogleIcon() {
 }
 
 export default function Login() {
+  useNoIndex();
   // OAuth is a full page navigation away from this app, so the backend is asked
   // whether it can take the sign-in before we leave. If it cannot, the app shows
   // its maintenance screen instead of the browser showing a 502.

@@ -24,6 +24,7 @@ import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
 import { PROVIDER_LOGOS } from "@/components/public/ProviderLogos";
 import { Badge } from "@/components/ui";
+import { useSEO } from "@/lib/seo";
 
 // ── Content ─────────────────────────────────────────────────────────────────
 
@@ -791,7 +792,41 @@ function CTA() {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
+const LANDING_JSONLD = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "SilkLLM",
+    "url": "https://getsilkllm.com",
+    "logo": "https://getsilkllm.com/logo.png",
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "SilkLLM",
+    "url": "https://getsilkllm.com",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any",
+    "description":
+      "One API key across text, image, audio and video models from OpenAI, Anthropic, Google, DeepSeek, xAI and more. Bring your own provider key and earn credits when others use it.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "Free trial credits, then pay-as-you-go at provider cost plus a 10% markup.",
+    },
+  },
+];
+
 export default function Landing() {
+  useSEO({
+    title: "SilkLLM - One key for every AI model, and a marketplace that pays you back",
+    description:
+      "One API key across text, image, audio and video models from OpenAI, Anthropic, Google, DeepSeek and xAI. Bring your own provider key and earn credits when others use it. Start free, and keep your chats on your own device.",
+    path: "/",
+    jsonLd: LANDING_JSONLD,
+  });
+
   return (
     <div className="min-h-[100dvh] bg-page text-ink overflow-x-clip">
       <PublicNav />

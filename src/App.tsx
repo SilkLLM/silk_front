@@ -15,6 +15,7 @@ import { prefetchArea } from "@/lib/prefetch";
 import { AuthContext, useAuthState } from "@/hooks/useAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
+import { useNoIndex } from "@/lib/seo";
 
 // Lazy load pages for code splitting
 const Landing       = lazy(() => import("@/pages/public/Landing"));
@@ -49,6 +50,7 @@ const queryClient = new QueryClient({
 // ── Route guards ────────────────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  useNoIndex();
   const { user, loading } = useAuth();
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;
@@ -56,6 +58,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
+  useNoIndex();
   const { user, loading, isAdmin } = useAuth();
   if (loading) return <LoadingSpinner />;
   if (!user) return <Navigate to="/login" replace />;

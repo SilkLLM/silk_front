@@ -11,8 +11,10 @@
 import React, { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useNoIndex } from "@/lib/seo";
 
 export default function Callback() {
+  useNoIndex();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { refreshUser } = useAuth();

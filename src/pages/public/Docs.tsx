@@ -16,6 +16,27 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
+import { useSEO } from "@/lib/seo";
+
+/** One-line summaries per section, used only for the per-tab meta description
+ *  (see useSEO below) - the section bodies are JSX, not plain text, so they
+ *  can't be derived from SECTIONS directly. Keep in sync with SECTIONS' ids. */
+const SECTION_DESCRIPTIONS: Record<string, string> = {
+  quickstart: "Get your first SilkLLM response in under two minutes: create a key, add credits, and call one endpoint.",
+  authentication: "Authenticate SilkLLM API requests with a Bearer token carried in the Authorization header.",
+  "key-budgets": "Cap what an individual API key can spend, independent of the account's overall balance.",
+  promotions: "Redeem promo codes and admin grants for a discount on the SilkLLM platform fee.",
+  "key-controls": "Rate limits, model/provider allowlists and shared budget pools for individual API keys.",
+  generate: "Call the unified /generate endpoint for text completions across every supported provider.",
+  models: "Browse the models SilkLLM routes to across OpenAI, Anthropic, Google, DeepSeek, xAI and more.",
+  marketplace: "Add your own provider key to the BYOK marketplace and earn credits when others use it.",
+  trials: "Free trial credits for new SilkLLM accounts, and how they interact with paid balance.",
+  multimodal: "Generate images, audio and video through the same unified SilkLLM endpoint and key.",
+  chat: "How SilkLLM's built-in chat stores conversations on-device rather than on the server.",
+  sdks: "Official Python and JavaScript SDKs for calling SilkLLM from your application.",
+  examples: "End-to-end SilkLLM code examples for common integration patterns.",
+  errors: "SilkLLM API error codes, their causes and how clients should handle each one.",
+};
 
 // ── Code snippets (Python / JavaScript pairs) ────────────────────────────────
 const CODE = {
@@ -1235,6 +1256,14 @@ export default function Docs() {
   const section = SECTIONS[active];
   const prev = active > 0 ? SECTIONS[active - 1] : null;
   const next = active < SECTIONS.length - 1 ? SECTIONS[active + 1] : null;
+
+  // Canonical stays a single /docs URL - these are tabs within one document,
+  // not separate pages, so only the title/description vary per section.
+  useSEO({
+    title: `${section.label} — SilkLLM Docs`,
+    description: SECTION_DESCRIPTIONS[section.id],
+    path: "/docs",
+  });
 
   // Deep links from the marketing pages land on a named section.
   useEffect(() => {
