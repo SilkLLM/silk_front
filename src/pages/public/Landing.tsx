@@ -483,6 +483,9 @@ function Marketplace() {
             A public key is only ever used by the routing engine. It is never shown to another user,
             never returned by the API, and you can revoke it at any time.
           </p>
+          <Link to="/marketplace" className="inline-flex items-center gap-1.5 text-sm text-accent-ink font-medium mt-4 hover:underline underline-offset-4 decoration-dotted">
+            How the marketplace works <ArrowRight size={14} />
+          </Link>
         </div>
       </Reveal>
     </Section>
@@ -594,6 +597,9 @@ function Voice() {
                 </span>
               ))}
             </div>
+            <Link to="/multimodal" className="inline-flex items-center gap-1.5 text-sm text-accent-ink font-medium mt-6 hover:underline underline-offset-4 decoration-dotted">
+              See image, audio and video pricing <ArrowRight size={14} />
+            </Link>
           </Reveal>
         </div>
 

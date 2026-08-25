@@ -21,7 +21,8 @@ import { IconButton, Menu as DropMenu, MenuItem } from "@/components/ui";
 
 const LINKS = [
   { label: "Models", href: "/#providers" },
-  { label: "Marketplace", href: "/#marketplace" },
+  { label: "Marketplace", href: "/marketplace" },
+  { label: "Multimodal", href: "/multimodal" },
   { label: "Pricing", href: "/#pricing" },
   { label: "Docs", href: "/docs" },
 ];
@@ -168,9 +169,10 @@ const FOOTER_GROUPS = [
     title: "Product",
     links: [
       { label: "Models", href: "/#providers" },
-      { label: "Marketplace", href: "/#marketplace" },
+      { label: "Marketplace", href: "/marketplace" },
+      { label: "Multimodal", href: "/multimodal" },
+      { label: "API key controls", href: "/api-key-controls" },
       { label: "Pricing", href: "/#pricing" },
-      { label: "Dashboard", href: "/dashboard" },
     ],
   },
   {
@@ -179,16 +181,17 @@ const FOOTER_GROUPS = [
       { label: "Documentation", href: "/docs" },
       { label: "Quickstart", href: "/docs#quickstart" },
       { label: "API reference", href: "/docs#generate" },
+      { label: "Guides", href: "/guides" },
       { label: "Examples", href: "/docs#examples" },
     ],
   },
   {
-    title: "Account",
+    title: "Compare & account",
     links: [
+      { label: "Alternatives to SilkLLM", href: "/alternatives" },
       { label: "Sign in", href: "/login" },
       { label: "Billing", href: "/dashboard/billing" },
       { label: "API keys", href: "/dashboard/keys" },
-      { label: "Usage", href: "/dashboard/usage" },
     ],
   },
 ];

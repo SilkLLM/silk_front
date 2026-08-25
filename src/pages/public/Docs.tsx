@@ -10,12 +10,13 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Copy, CheckCircle, BookOpen, Key, Zap, Layers, Code2, AlertTriangle,
+  BookOpen, Key, Zap, Layers, Code2, AlertTriangle,
   ArrowLeft, ArrowRight, ChevronDown, Coins, Gift, Image as ImageIcon,
   MessageSquare, Search, Wallet, ShieldCheck, BadgePercent,
 } from "lucide-react";
 import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
+import { CodeBlock, LangTabs, Pill, Para, H3, DocTable, Callout } from "@/components/public/Prose";
 import { useSEO } from "@/lib/seo";
 
 /** One-line summaries per section, used only for the per-tab meta description
@@ -570,129 +571,6 @@ const result = await client.speechToSpeech({
 console.log(result.format, result.audio_b64.length);`,
 };
 
-// ── Lightweight syntax colorizer ─────────────────────────────────────────────
-// Only comments are distinguished, which is the one thing that genuinely helps
-// scanning. Colours come from tokens so it reads in both themes.
-function colorize(line: string): React.ReactNode {
-  const hash = line.indexOf("#");
-  const slashes = line.indexOf("//");
-  const idx = hash >= 0 ? hash : slashes;
-  if (idx >= 0 && !line.slice(0, idx).includes('"')) {
-    return (
-      <>
-        <span className="text-ink">{line.slice(0, idx)}</span>
-        <span className="text-ink-3 italic">{line.slice(idx)}</span>
-      </>
-    );
-  }
-  return <span className="text-ink">{line}</span>;
-}
-
-function CodeBlock({ code, lang = "python" }: { code: string; lang?: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
-  const label: Record<string, string> = { python: "Python", javascript: "JavaScript", bash: "Shell", http: "HTTP" };
-  return (
-    <div className="rounded-xl overflow-hidden border border-line bg-sunken my-3">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-line">
-        <span className="text-2xs font-mono text-ink-3">{label[lang] || lang}</span>
-        <button
-          onClick={copy}
-          className="inline-flex items-center gap-1.5 h-8 px-2 -mr-2 rounded text-2xs text-ink-3 hover:text-ink hover:bg-ink/[0.05] transition-colors"
-        >
-          {copied ? <><CheckCircle size={11} className="text-success" /> Copied</> : <><Copy size={11} /> Copy</>}
-        </button>
-      </div>
-      {/* The snippet is the one thing on this page that must not be reflowed,
-          so it scrolls inside its own box rather than widening the page. */}
-      <pre className="p-4 sm:p-5 overflow-x-auto text-[13px] font-mono leading-7 m-0 text-ink">
-        {code.split("\n").map((line, i) => (
-          // An empty <div> collapses to zero height, which silently swallows the
-          // blank lines that separate logical groups in a snippet.
-          <div key={i}>{line ? colorize(line) : "\u00a0"}</div>
-        ))}
-      </pre>
-    </div>
-  );
-}
-
-/** Python / JavaScript toggle over a pair of snippets. */
-function LangTabs({ python, javascript }: { python: string; javascript: string }) {
-  const [lang, setLang] = useState<"python" | "javascript">("python");
-  return (
-    <div className="my-3">
-      <div className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-sunken border border-line mb-2">
-        {(["python", "javascript"] as const).map((l) => (
-          <button
-            key={l}
-            onClick={() => setLang(l)}
-            aria-pressed={lang === l}
-            className={clsx(
-              "px-3 h-7 rounded-[7px] text-xs font-medium transition-all",
-              lang === l ? "bg-surface text-ink shadow-xs" : "text-ink-2 hover:text-ink",
-            )}
-          >
-            {l === "python" ? "Python" : "JavaScript"}
-          </button>
-        ))}
-      </div>
-      <CodeBlock code={lang === "python" ? python : javascript} lang={lang} />
-    </div>
-  );
-}
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <code className="text-[0.85em] font-mono px-1.5 py-0.5 rounded bg-ink/[0.06] text-accent-ink border border-line">
-      {children}
-    </code>
-  );
-}
-
-function Para({ children }: { children: React.ReactNode }) {
-  return <p className="mb-4 leading-relaxed text-ink-2">{children}</p>;
-}
-
-function H3({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-2xs font-semibold uppercase tracking-wider mt-7 mb-3 text-ink-3">{children}</h3>;
-}
-
-function DocTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  return (
-    <div className="rounded-xl border border-line overflow-hidden my-4">
-      <div className="scroll-x">
-        <table className="table-shell">
-          <thead>
-            <tr>{headers.map((h) => <th key={h}>{h}</th>)}</tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i}>
-                {row.map((cell, j) => (
-                  <td
-                    key={j}
-                    className={j === 0 ? "font-mono text-xs text-accent-ink whitespace-nowrap" : "text-sm text-ink-2"}
-                  >
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function Callout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl px-4 py-3.5 my-4 text-sm leading-relaxed bg-accent/[0.07] border border-accent/25 text-ink-2">
-      {children}
-    </div>
-  );
-}
-
 // ── Sections (one is shown at a time) ────────────────────────────────────────
 const SECTIONS = [
   {
@@ -1058,6 +936,10 @@ const SECTIONS = [
           A mistyped limit field used to produce a budget with no limit at all, which is the worst
           possible reading of "I set a budget".
         </Callout>
+        <Para>
+          For use cases and the full picture, see the{" "}
+          <Link to="/api-key-controls" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">API key controls page</Link>.
+        </Para>
       </>
     ),
   },
@@ -1084,6 +966,10 @@ const SECTIONS = [
           ]}
         />
         <Callout>Omit <Pill>model</Pill> and SilkLLM routes to the cheapest healthy model in the fallback chain.</Callout>
+        <Para>
+          More on this: <Link to="/guides/llm-provider-failover" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">automatic provider failover</Link> and{" "}
+          <Link to="/guides/one-api-key-multiple-providers" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">calling multiple providers from one key</Link>.
+        </Para>
       </>
     ),
   },
@@ -1128,6 +1014,10 @@ const SECTIONS = [
           ]}
         />
         <Callout>A working marketplace key with budget always takes priority over the platform key. Free models are free only while a trial covers the request; once you are paying from balance they are billed like any other model (their provider cost is near zero, so the charge is tiny, but a request still needs credit).</Callout>
+        <Para>
+          For the full walkthrough - how earnings work, security, and FAQ - see the{" "}
+          <Link to="/marketplace" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">marketplace page</Link>.
+        </Para>
       </>
     ),
   },
@@ -1165,6 +1055,10 @@ const SECTIONS = [
         <Para>Clone a speaker from your own audio samples, then use it for text-to-speech or to convert an existing clip into that voice (speech-to-speech). Conversion is priced per second of source audio.</Para>
         <LangTabs python={CODE.pySts} javascript={CODE.jsSts} />
         <Callout>Add your ElevenLabs API key under Admin, Providers. Its voice models then serve just like any other model, priced per character (per second for conversion).</Callout>
+        <Para>
+          For pricing across every modality and more on voices, see the{" "}
+          <Link to="/multimodal" className="text-accent-ink underline decoration-dotted underline-offset-4 py-2">multimodal page</Link>.
+        </Para>
       </>
     ),
   },

@@ -24,6 +24,13 @@ const KEY_LOCATION = `https://${HOST}/${INDEXNOW_KEY}.txt`;
 const URL_LIST = [
   `https://${HOST}/`,
   `https://${HOST}/docs`,
+  `https://${HOST}/marketplace`,
+  `https://${HOST}/api-key-controls`,
+  `https://${HOST}/multimodal`,
+  `https://${HOST}/alternatives`,
+  `https://${HOST}/guides`,
+  `https://${HOST}/guides/llm-provider-failover`,
+  `https://${HOST}/guides/one-api-key-multiple-providers`,
 ];
 
 const res = await fetch("https://api.indexnow.org/indexnow", {

@@ -18,8 +18,14 @@ import { useTheme } from "@/hooks/useTheme";
 import { useNoIndex } from "@/lib/seo";
 
 // Lazy load pages for code splitting
-const Landing       = lazy(() => import("@/pages/public/Landing"));
-const Docs          = lazy(() => import("@/pages/public/Docs"));
+const Landing         = lazy(() => import("@/pages/public/Landing"));
+const Docs            = lazy(() => import("@/pages/public/Docs"));
+const Marketplace     = lazy(() => import("@/pages/public/Marketplace"));
+const ApiKeyControls  = lazy(() => import("@/pages/public/ApiKeyControls"));
+const Multimodal      = lazy(() => import("@/pages/public/Multimodal"));
+const Alternatives    = lazy(() => import("@/pages/public/Alternatives"));
+const Guides          = lazy(() => import("@/pages/public/Guides"));
+const GuideArticle    = lazy(() => import("@/pages/public/GuideArticle"));
 const Login         = lazy(() => import("@/pages/auth/Login"));
 const Callback      = lazy(() => import("@/pages/auth/Callback"));
 const UserDashboard = lazy(() => import("@/pages/user/Dashboard"));
@@ -117,6 +123,12 @@ function AppRoutes() {
         {/* Public */}
         <Route path="/"     element={<Landing />} />
         <Route path="/docs" element={<Docs />} />
+        <Route path="/marketplace"       element={<Marketplace />} />
+        <Route path="/api-key-controls"  element={<ApiKeyControls />} />
+        <Route path="/multimodal"        element={<Multimodal />} />
+        <Route path="/alternatives"      element={<Alternatives />} />
+        <Route path="/guides"            element={<Guides />} />
+        <Route path="/guides/:slug"      element={<GuideArticle />} />
 
         {/* Auth */}
         <Route path="/login"          element={<Login />} />
