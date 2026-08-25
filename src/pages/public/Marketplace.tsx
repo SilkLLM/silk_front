@@ -147,11 +147,23 @@ export default function Marketplace() {
 for k in client.list_provider_keys():
     print(k.label, "earned", k.earned_credits_total, "served", k.requests_served)`} />
 
+        <H2>How supply meets demand</H2>
+        <Para>
+          When a request comes in, SilkLLM checks first whether a marketplace key with
+          budget remaining can serve it - matching that supply (deposited keys with room
+          left) to demand (incoming requests) automatically, before falling back to
+          SilkLLM's own platform capacity. A working marketplace key always takes priority
+          over the platform key, which is what makes depositing one worth doing: it starts
+          earning as soon as there's demand for it, without you manually routing anything.
+        </Para>
+
         <H2>Security</H2>
         <Para>
-          Keys are encrypted at rest and never returned by the API after the moment you
-          save them - not to you, and never to the users your key ends up serving. Revoking
-          a key takes effect immediately.
+          Keys are encrypted at rest with a key derived per deployment, and never returned
+          by the API after the moment you save them - not to you, and never to the users
+          your key ends up serving. The routing engine holds the decrypted key only for the
+          instant it takes to make the provider call; it is never logged, and revoking a
+          key takes effect immediately.
         </Para>
 
         <H2>Frequently asked</H2>

@@ -17,8 +17,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useInView } from "framer-motion";
 import {
-  ArrowRight, AudioLines, Check, Coins, Copy, Gauge, Image as ImageIcon, Key,
-  Layers, Lock, Mic, ShieldCheck, Sparkles, Type, Video, Wand2,
+  AlertTriangle, ArrowRight, AudioLines, Check, CheckCircle2, Coins, Copy,
+  Gauge, Image as ImageIcon, Key, Layers, Lock, Mic, RotateCcw, ShieldCheck,
+  Sparkles, Type, Video, Wand2, XCircle,
 } from "lucide-react";
 import clsx from "clsx";
 import { PublicFooter, PublicNav } from "@/components/public/PublicChrome";
@@ -522,6 +523,88 @@ function Modalities() {
   );
 }
 
+// ── Fallback chain, shown as a log rather than claimed as a checklist item ──
+
+interface LogLine {
+  icon: React.ReactNode;
+  tone: "muted" | "error" | "info" | "success";
+  text: string;
+}
+
+const FAILOVER_LOG: LogLine[] = [
+  { icon: <ArrowRight size={13} />, tone: "muted", text: 'POST /api/generate  model="claude-3-5-sonnet"' },
+  { icon: <XCircle size={13} />, tone: "error", text: "anthropic → 503 Service Unavailable" },
+  { icon: <RotateCcw size={13} />, tone: "info", text: "walking this model's fallback chain..." },
+  { icon: <ArrowRight size={13} />, tone: "muted", text: 'retrying via "gpt-4o"' },
+  { icon: <CheckCircle2 size={13} />, tone: "success", text: "openai → 200 OK · 340ms · $0.0019" },
+];
+
+const LOG_TONE_CLASS: Record<LogLine["tone"], string> = {
+  muted: "text-ink-3",
+  error: "text-danger",
+  info: "text-accent-ink",
+  success: "text-success",
+};
+
+/** Types out a mock failover, one line at a time, once it scrolls into view.
+ *  This is illustrative - a fixed example sequence, not a live trace of real
+ *  traffic - and says so, the same way the hero's own code panel is a typed
+ *  demo rather than a live terminal. What it demonstrates is real: every
+ *  model does carry a server-configured fallback chain (see the failover
+ *  guide), this is just showing what that looks like from the outside. */
+function FailoverDemo() {
+  const [shown, setShown] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-100px" });
+
+  useEffect(() => {
+    if (!inView || shown >= FAILOVER_LOG.length) return;
+    const t = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 300 : 550);
+    return () => clearTimeout(t);
+  }, [inView, shown]);
+
+  return (
+    <Section>
+      <SectionHead
+        eyebrow="Reliability"
+        title="A provider outage becomes a retry, not an incident"
+        sub="Every model carries a fallback chain. When one provider stumbles, SilkLLM walks the chain automatically - nothing in your code has to notice."
+        center
+      />
+
+      <Reveal delay={0.1} className="mt-10 max-w-xl mx-auto">
+        <div ref={ref} className="relative">
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 rounded-3xl glass rotate-[-1.5deg] translate-y-2 opacity-50"
+          />
+          <div className="relative glass rounded-3xl shadow-overlay overflow-hidden">
+            <div className="flex items-center gap-2 px-4 h-11 border-b border-ink/[0.06]">
+              <span className="flex gap-1.5" aria-hidden="true">
+                {["#ef4444", "#f5a623", "#22c55e"].map((c) => (
+                  <span key={c} className="w-2.5 h-2.5 rounded-full opacity-70" style={{ background: c }} />
+                ))}
+              </span>
+              <span className="text-2xs font-mono text-ink-3 ml-1">example · not live traffic</span>
+            </div>
+            <div className="p-4 sm:p-6 font-mono text-[13px] leading-8">
+              {FAILOVER_LOG.slice(0, shown).map((line, i) => (
+                <div key={i} className={clsx("flex items-center gap-2", LOG_TONE_CLASS[line.tone])}>
+                  {line.icon}
+                  <span>{line.text}</span>
+                </div>
+              ))}
+              {shown < FAILOVER_LOG.length && (
+                <span className="inline-block w-2 h-4 align-middle bg-accent animate-pulse" />
+              )}
+            </div>
+          </div>
+        </div>
+      </Reveal>
+    </Section>
+  );
+}
+
 // ── Marketplace: a flow, not four boxes ─────────────────────────────────────
 
 /**
@@ -934,6 +1017,7 @@ export default function Landing() {
         <Migrate />
         <Marquee />
         <Modalities />
+        <FailoverDemo />
         <Marketplace />
         <HowItWorks />
         <Providers />
